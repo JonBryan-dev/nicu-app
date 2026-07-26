@@ -1,0 +1,468 @@
+/* globals.css — extracted from reference-design.html (visual source of truth) */
+:root {
+  --linen: #faf7f2;
+  --ink: #2e2a33;
+  --ink-soft: #6e6672;
+  --rose: #c98a8e;
+  --rose-deep: #a96065;
+  --sage: #7e9c7e;
+  --mist: #ede7de;
+  --card: #ffffff;
+  --radius: 16px;
+  --sky: #7e93a8;
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+html {
+  background: var(--linen);
+}
+body {
+  font-family: var(--font-nunito), system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--linen);
+  min-height: 100vh;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.wrap {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 14px 96px;
+}
+.hero {
+  padding: 26px 4px 14px;
+  text-align: center;
+}
+.hero .baby {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 600;
+  font-size: 1.35rem;
+  color: var(--rose-deep);
+}
+.hero .day {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 500;
+  font-size: 3.2rem;
+  line-height: 1.05;
+  margin-top: 2px;
+}
+.hero .sub {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin-top: 4px;
+}
+.hero .hello {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  margin-top: 10px;
+}
+.hero .hello button {
+  background: none;
+  border: none;
+  color: var(--rose-deep);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  gap: 4px;
+  background: var(--linen);
+  padding: 10px 0 12px;
+}
+.tabs a {
+  flex: 1;
+  border: 1px solid var(--mist);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 9px 1px;
+  font: 600 0.78rem var(--font-nunito), sans-serif;
+  color: var(--ink-soft);
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+}
+.tabs a.on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--linen);
+}
+.tabs a:focus-visible {
+  outline: 2px solid var(--rose-deep);
+  outline-offset: 2px;
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+h2 {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 600;
+  font-size: 1.12rem;
+  margin-bottom: 4px;
+}
+h3 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--rose-deep);
+  margin: 12px 0 2px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.note {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+}
+button.primary {
+  background: var(--rose-deep);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 11px 18px;
+  font: 700 0.9rem var(--font-nunito), sans-serif;
+  cursor: pointer;
+}
+button.primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+button.ghost {
+  background: none;
+  border: 1px solid var(--mist);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font: 600 0.8rem var(--font-nunito), sans-serif;
+  color: var(--ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+button.tiny {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  font: 600 0.75rem var(--font-nunito), sans-serif;
+  cursor: pointer;
+  padding: 4px;
+}
+button:focus-visible {
+  outline: 2px solid var(--rose-deep);
+  outline-offset: 2px;
+}
+input[type="text"],
+input[type="email"],
+input[type="date"],
+input[type="time"],
+textarea {
+  width: 100%;
+  border: 1px solid var(--mist);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: 400 0.95rem var(--font-nunito), sans-serif;
+  color: var(--ink);
+  background: var(--linen);
+}
+textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin: 10px 0 4px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+}
+.row > * {
+  flex: 1;
+}
+.muted {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+.empty {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 18px 6px;
+}
+.thread {
+  position: relative;
+  padding-left: 26px;
+}
+.thread::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  bottom: 6px;
+  border-left: 2px dotted var(--rose);
+}
+.post {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--mist);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.post::before {
+  content: "";
+  position: absolute;
+  left: -23px;
+  top: 18px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--linen);
+  border: 2px solid var(--rose);
+}
+.post.milestone::before {
+  background: var(--rose-deep);
+  border-color: var(--rose-deep);
+}
+.post .meta {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+.post .flag {
+  display: inline-block;
+  background: var(--rose);
+  color: #fff;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+.post p {
+  white-space: pre-wrap;
+}
+.tick {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--mist);
+}
+.tick:last-child {
+  border-bottom: none;
+}
+.tick input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: var(--sage);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.tick input[type="checkbox"]:disabled {
+  cursor: default;
+}
+.tick span {
+  flex: 1;
+}
+.tick.done span {
+  color: var(--ink-soft);
+  text-decoration: line-through;
+}
+.progress {
+  height: 6px;
+  background: var(--mist);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 6px 0 12px;
+}
+.progress i {
+  display: block;
+  height: 100%;
+  background: var(--sage);
+  border-radius: 999px;
+  transition: width 0.3s;
+}
+.task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--mist);
+}
+.task:last-child {
+  border-bottom: none;
+}
+.task .info {
+  flex: 1;
+}
+.task .who {
+  font-size: 0.78rem;
+  color: var(--sage);
+  font-weight: 700;
+}
+.slot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--mist);
+}
+.slot:last-child {
+  border-bottom: none;
+}
+.slot .t {
+  font-weight: 700;
+}
+.datehead {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin: 14px 0 2px;
+  color: var(--rose-deep);
+}
+.badge {
+  display: inline-block;
+  background: var(--mist);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.badge.booked {
+  background: var(--sage);
+  color: #fff;
+}
+/* shift grid */
+.shift {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.shift th {
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  font-weight: 700;
+  padding: 4px 1px;
+  text-transform: uppercase;
+}
+.shift td {
+  padding: 2px;
+}
+.chip {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 0;
+  font: 700 0.68rem var(--font-nunito), sans-serif;
+  cursor: pointer;
+  color: #fff;
+}
+.chip:disabled {
+  cursor: default;
+}
+.chip.both {
+  background: var(--rose-deep);
+}
+.chip.mum {
+  background: var(--rose);
+}
+.chip.dad {
+  background: var(--sky);
+}
+.chip.family {
+  background: var(--sage);
+}
+.chip.rest {
+  background: var(--mist);
+  color: var(--ink-soft);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+.legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--linen);
+  z-index: 50;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.overlay .card {
+  max-width: 420px;
+  width: 100%;
+}
+.rolepick {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.rolepick button {
+  flex: 1;
+  border: 1.5px solid var(--mist);
+  background: var(--card);
+  border-radius: 12px;
+  padding: 12px;
+  font: 700 0.9rem var(--font-nunito), sans-serif;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.rolepick button.on {
+  border-color: var(--rose-deep);
+  color: var(--rose-deep);
+  background: #fbf3f3;
+}
+.err {
+  color: var(--rose-deep);
+  text-align: center;
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+.code-box {
+  background: var(--linen);
+  border: 1px dashed var(--rose);
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: center;
+  font: 700 1.3rem var(--font-fraunces), Georgia, serif;
+  letter-spacing: 0.15em;
+  color: var(--rose-deep);
+  margin-top: 4px;
+}
+.hide {
+  display: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

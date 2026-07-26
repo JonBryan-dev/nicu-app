@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+build/
+
+# env — anon key + VAPID public key live in Vercel env vars, not the repo
+.env
+.env.local
+.env*.local
+
+# supabase local CLI state
+supabase/.temp/
+
+# os / editor
+.DS_Store
+*.log

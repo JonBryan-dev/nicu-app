@@ -1,0 +1,556 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Our NICU Journey</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Nunito+Sans:wght@400;600;700&display=swap');
+:root{
+  --linen:#FAF7F2;--ink:#2E2A33;--ink-soft:#6E6672;
+  --rose:#C98A8E;--rose-deep:#A96065;--sage:#7E9C7E;
+  --mist:#EDE7DE;--card:#FFFFFF;--radius:16px;
+  --sky:#7E93A8;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--linen)}
+body{font-family:'Nunito Sans',system-ui,-apple-system,sans-serif;color:var(--ink);background:var(--linen);min-height:100vh;font-size:16px;line-height:1.5}
+.wrap{max-width:560px;margin:0 auto;padding:0 14px 96px}
+.hero{padding:26px 4px 14px;text-align:center}
+.hero .baby{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:1.35rem;color:var(--rose-deep)}
+.hero .day{font-family:'Fraunces',Georgia,serif;font-weight:500;font-size:3.2rem;line-height:1.05;margin-top:2px}
+.hero .sub{color:var(--ink-soft);font-size:.9rem;margin-top:4px}
+.hero .hello{color:var(--ink-soft);font-size:.85rem;margin-top:10px}
+.hero .hello button{background:none;border:none;color:var(--rose-deep);font:inherit;cursor:pointer;text-decoration:underline}
+.tabs{position:sticky;top:0;z-index:10;display:flex;gap:4px;background:var(--linen);padding:10px 0 12px}
+.tabs button{flex:1;border:1px solid var(--mist);background:var(--card);border-radius:999px;padding:9px 1px;font:600 .78rem 'Nunito Sans',sans-serif;color:var(--ink-soft);cursor:pointer}
+.tabs button.on{background:var(--ink);border-color:var(--ink);color:var(--linen)}
+.tabs button:focus-visible{outline:2px solid var(--rose-deep);outline-offset:2px}
+.card{background:var(--card);border:1px solid var(--mist);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+h2{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:1.12rem;margin-bottom:4px}
+h3{font-size:.85rem;font-weight:700;color:var(--rose-deep);margin:12px 0 2px;letter-spacing:.02em;text-transform:uppercase}
+.note{color:var(--ink-soft);font-size:.85rem;margin-bottom:12px}
+button.primary{background:var(--rose-deep);color:#fff;border:none;border-radius:12px;padding:11px 18px;font:700 .9rem 'Nunito Sans',sans-serif;cursor:pointer}
+button.ghost{background:none;border:1px solid var(--mist);border-radius:12px;padding:8px 12px;font:600 .8rem 'Nunito Sans',sans-serif;color:var(--ink-soft);cursor:pointer;white-space:nowrap}
+button.tiny{background:none;border:none;color:var(--ink-soft);font:600 .75rem 'Nunito Sans',sans-serif;cursor:pointer;padding:4px}
+button:focus-visible{outline:2px solid var(--rose-deep);outline-offset:2px}
+input[type=text],input[type=date],input[type=time],textarea{width:100%;border:1px solid var(--mist);border-radius:12px;padding:10px 12px;font:400 .95rem 'Nunito Sans',sans-serif;color:var(--ink);background:var(--linen)}
+textarea{resize:vertical;min-height:70px}
+label{display:block;font-size:.8rem;font-weight:700;color:var(--ink-soft);margin:10px 0 4px}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.muted{color:var(--ink-soft);font-size:.85rem}
+.empty{color:var(--ink-soft);font-size:.9rem;text-align:center;padding:18px 6px}
+.thread{position:relative;padding-left:26px}
+.thread::before{content:"";position:absolute;left:8px;top:6px;bottom:6px;border-left:2px dotted var(--rose)}
+.post{position:relative;background:var(--card);border:1px solid var(--mist);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.post::before{content:"";position:absolute;left:-23px;top:18px;width:10px;height:10px;border-radius:50%;background:var(--linen);border:2px solid var(--rose)}
+.post.milestone::before{background:var(--rose-deep);border-color:var(--rose-deep)}
+.post .meta{font-size:.75rem;color:var(--ink-soft);margin-bottom:4px}
+.post .flag{display:inline-block;background:var(--rose);color:#fff;border-radius:999px;padding:2px 10px;font-size:.7rem;font-weight:700;letter-spacing:.03em;margin-bottom:6px}
+.post p{white-space:pre-wrap}
+.tick{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--mist)}
+.tick:last-child{border-bottom:none}
+.tick input[type=checkbox]{width:20px;height:20px;margin-top:2px;accent-color:var(--sage);flex-shrink:0;cursor:pointer}
+.tick span{flex:1}
+.tick.done span{color:var(--ink-soft);text-decoration:line-through}
+.progress{height:6px;background:var(--mist);border-radius:999px;overflow:hidden;margin:6px 0 12px}
+.progress i{display:block;height:100%;background:var(--sage);border-radius:999px;transition:width .3s}
+.task{display:flex;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid var(--mist)}
+.task:last-child{border-bottom:none}
+.task .info{flex:1}
+.task .who{font-size:.78rem;color:var(--sage);font-weight:700}
+.slot{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--mist)}
+.slot:last-child{border-bottom:none}
+.slot .t{font-weight:700}
+.datehead{font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:.95rem;margin:14px 0 2px;color:var(--rose-deep)}
+.badge{display:inline-block;background:var(--mist);border-radius:999px;padding:2px 10px;font-size:.72rem;font-weight:700;color:var(--ink-soft)}
+.badge.booked{background:var(--sage);color:#fff}
+/* shift grid */
+.shift{width:100%;border-collapse:collapse;table-layout:fixed}
+.shift th{font-size:.68rem;color:var(--ink-soft);font-weight:700;padding:4px 1px;text-transform:uppercase}
+.shift td{padding:2px}
+.chip{width:100%;border:none;border-radius:8px;padding:8px 0;font:700 .68rem 'Nunito Sans',sans-serif;cursor:pointer;color:#fff}
+.chip.both{background:var(--rose-deep)}
+.chip.mum{background:var(--rose)}
+.chip.dad{background:var(--sky)}
+.chip.family{background:var(--sage)}
+.chip.rest{background:var(--mist);color:var(--ink-soft)}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:.72rem;color:var(--ink-soft)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:middle}
+.overlay{position:fixed;inset:0;background:var(--linen);z-index:50;overflow:auto;display:flex;align-items:center;justify-content:center;padding:20px}
+.overlay .card{max-width:420px;width:100%}
+.rolepick{display:flex;gap:8px;margin-top:6px}
+.rolepick button{flex:1;border:1.5px solid var(--mist);background:var(--card);border-radius:12px;padding:12px;font:700 .9rem 'Nunito Sans',sans-serif;color:var(--ink-soft);cursor:pointer}
+.rolepick button.on{border-color:var(--rose-deep);color:var(--rose-deep);background:#FBF3F3}
+.hide{display:none!important}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="overlay" id="setup">
+  <div class="card">
+    <h2 style="text-align:center">Welcome</h2>
+    <p class="note" style="text-align:center">Tell us who you are — you'll only do this once on this device.</p>
+    <label>Your first name</label>
+    <input type="text" id="su-name" placeholder="e.g. Jon">
+    <label>You are…</label>
+    <div class="rolepick">
+      <button id="su-parent" onclick="pickRole('parent')">Mum / Dad</button>
+      <button id="su-family" onclick="pickRole('family')">Family / Friend</button>
+    </div>
+    <div id="su-babywrap" class="hide">
+      <label>Baby's name</label>
+      <input type="text" id="su-baby" placeholder="Her name">
+      <label>Date of birth</label>
+      <input type="date" id="su-dob">
+    </div>
+    <div style="margin-top:16px;text-align:center"><button class="primary" onclick="finishSetup()">Let's go</button></div>
+    <p class="muted" id="su-err" style="color:var(--rose-deep);text-align:center;margin-top:8px"></p>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="hero">
+    <div class="baby" id="h-baby"></div>
+    <div class="day" id="h-day">—</div>
+    <div class="sub" id="h-sub"></div>
+    <div class="hello" id="h-hello"></div>
+  </div>
+
+  <nav class="tabs" aria-label="Sections">
+    <button id="tab-updates" class="on" onclick="show('updates')">Updates</button>
+    <button id="tab-lists" onclick="show('lists')">Lists</button>
+    <button id="tab-support" onclick="show('support')">Support</button>
+    <button id="tab-visits" onclick="show('visits')">Visits</button>
+    <button id="tab-rest" onclick="show('rest')">Rest</button>
+  </nav>
+
+  <!-- UPDATES -->
+  <section id="sec-updates">
+    <div class="card" id="post-composer">
+      <h2>Share an update</h2>
+      <textarea id="up-text" placeholder="Weight today, how she's doing, a little win…"></textarea>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer">
+        <input type="checkbox" id="up-milestone" style="width:18px;height:18px;accent-color:var(--rose-deep)">
+        <span style="font-weight:700;font-size:.85rem;color:var(--rose-deep)">Mark as a milestone ✦</span>
+      </label>
+      <div style="margin-top:12px"><button class="primary" onclick="addUpdate()">Post update</button></div>
+    </div>
+    <div class="thread" id="feed"></div>
+  </section>
+
+  <!-- LISTS -->
+  <section id="sec-lists" class="hide">
+    <div class="card">
+      <h2>Today <span class="muted" id="dl-date"></span></h2>
+      <div class="progress"><i id="dl-bar" style="width:0%"></i></div>
+      <div id="daily-list"></div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="dl-new" placeholder="Add something for today…">
+        <button class="ghost" style="flex:0 0 auto" onclick="addItem('daily')">Add</button>
+      </div>
+      <p class="muted" style="margin-top:8px">Resets fresh each morning.</p>
+    </div>
+    <div class="card">
+      <h2>This week</h2>
+      <div class="progress"><i id="wk-bar" style="width:0%"></i></div>
+      <div id="weekly-list"></div>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="wk-new" placeholder="Add something for this week…">
+        <button class="ghost" style="flex:0 0 auto" onclick="addItem('weekly')">Add</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SUPPORT -->
+  <section id="sec-support" class="hide">
+    <div class="card">
+      <h2>How family can help this week</h2>
+      <p class="note">Tap <b>I'll do this</b> to claim a job. Parents can <b>Nudge</b> a job out via WhatsApp to chase cover.</p>
+      <div id="support-list"></div>
+      <div class="row parent-only" style="margin-top:10px">
+        <input type="text" id="sp-new" placeholder="Add a job family could do…">
+        <button class="ghost" style="flex:0 0 auto" onclick="addSupport()">Add</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- VISITS -->
+  <section id="sec-visits" class="hide">
+    <div class="card parent-only">
+      <h2>Open a visiting slot</h2>
+      <p class="note">Only slots you open here can be booked — visits only happen when they suit you.</p>
+      <div class="row">
+        <div><label>Date</label><input type="date" id="vs-date"></div>
+        <div><label>From</label><input type="time" id="vs-from"></div>
+        <div><label>To</label><input type="time" id="vs-to"></div>
+      </div>
+      <div style="margin-top:12px"><button class="primary" onclick="addSlot()">Open slot</button></div>
+    </div>
+    <div class="card">
+      <h2>Visiting slots</h2>
+      <p class="note family-only">Pick a free slot and it's yours — one household per slot.</p>
+      <div id="slot-list"></div>
+    </div>
+  </section>
+
+  <!-- REST / WELLBEING -->
+  <section id="sec-rest" class="hide">
+    <div class="card">
+      <h2>This week's shift pattern</h2>
+      <p class="note">Tap a block to change who's on. You don't both need to be bedside all day — the unit will call if anything changes.</p>
+      <table class="shift" id="shift-grid" aria-label="Weekly shift pattern"></table>
+      <div class="legend">
+        <span><i style="background:var(--rose-deep)"></i>Both</span>
+        <span><i style="background:var(--rose)"></i>Mum</span>
+        <span><i style="background:var(--sky)"></i>Dad</span>
+        <span><i style="background:var(--sage)"></i>Family sit-in</span>
+        <span><i style="background:var(--mist)"></i>Rest / off</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Wellbeing today</h2>
+      <div class="progress"><i id="wb-bar" style="width:0%"></i></div>
+      <h3>Mum</h3>
+      <div id="wb-mum"></div>
+      <h3>Dad</h3>
+      <div id="wb-dad"></div>
+    </div>
+    <div class="card">
+      <h2>Respite this week</h2>
+      <p class="note">Aim to tick at least three. The guilt of leaving is normal — go anyway.</p>
+      <div class="progress"><i id="rs-bar" style="width:0%"></i></div>
+      <div id="respite-list"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+let profile=null,settings=null,updates=[],checklists={},supportTasks=[],slots=[];
+let wellbeing={},shifts={},respite={},memOnly=false;
+
+const DAILY_DEFAULTS=[
+  "Be at ward round — note weight, feeds, any changes",
+  "Skin-to-skin / kangaroo care session",
+  "Expressing kit washed & sterilised, bottles labelled",
+  "One proper sit-down meal each",
+  "Photo or video of the day",
+  "Ask the nurses: what can we do ourselves today?",
+  "Do one of her cares ourselves (nappy, temp, mouth care)"
+];
+const WEEKLY_DEFAULTS=[
+  "Half a day off-site each (separately is fine)",
+  "One evening together while family sits with baby",
+  "Laundry swapped with family",
+  "Check in with unit counsellor / Bliss if needed",
+  "Send family the jobs list for next week",
+  "Review shift pattern for next week together"
+];
+const SUPPORT_DEFAULTS=[
+  "Monday — home-cooked meal drop to the hospital",
+  "Wednesday — meal or decent takeaway drop",
+  "Friday — meal drop + snack/toiletries top-up",
+  "Sunday — collect laundry, return last week's clean",
+  "House check: post, bins, plants",
+  "One errand run (whatever we text you that week)"
+];
+const SUPPORT_V2=[
+  "Batch-cook freezer meals for when we're home",
+  "Pick up any prescriptions / pharmacy bits",
+  "Fuel the car / sort parking top-ups",
+  "Wash & prep baby clothes at home (non-bio, ready for discharge)",
+  "Sort the nursery so it's ready for homecoming",
+  "Deep clean the house the week before discharge",
+  "Sit with baby so mum & dad get an evening off together",
+  "Airport-run style pickups: collect anything we order online"
+];
+const WB_MUM=[
+  "Unbroken sleep block protected (3h+)",
+  "Shower & properly dressed",
+  "Proper meal, sat down — not over the incubator",
+  "30 min outside the unit — daylight & air",
+  "One non-hospital thing (call a friend, walk, podcast)",
+  "Expressing on track without skipping rest to do it"
+];
+const WB_DAD=[
+  "Sleep block protected",
+  "Shower & properly dressed",
+  "Proper meal, sat down",
+  "Exercise or 30 min fresh air",
+  "One non-hospital thing (mate, gym, podcast)",
+  "Checked in with mum: how is she actually doing?"
+];
+const RESPITE_IDEAS=[
+  "Half-day at home each — sleep in your own bed",
+  "Evening together out of the hospital (family sit-in booked)",
+  "Gym / swim / long walk",
+  "Coffee or pub lunch with a friend, off-site",
+  "Film night in the family room — phones down",
+  "Sunday lunch out — the unit will ring if needed",
+  "One full night's sleep at home each (take turns)"
+];
+const DAYS=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const BLOCKS=["AM","PM","Eve"];
+const STATES=["both","mum","dad","family","rest"];
+const STATE_LABEL={both:"Both",mum:"Mum",dad:"Dad",family:"Fam",rest:"—"};
+
+async function sGet(k,sh){try{const r=await window.storage.get(k,sh);return r?JSON.parse(r.value):null}catch(e){return null}}
+async function sSet(k,v,sh){try{await window.storage.set(k,JSON.stringify(v),sh)}catch(e){memOnly=true}}
+
+const todayKey=()=>new Date().toISOString().slice(0,10);
+function weekKey(){const d=new Date();const o=new Date(d.getFullYear(),0,1);const w=Math.ceil((((d-o)/864e5)+o.getDay()+1)/7);return d.getFullYear()+"-W"+w}
+function fmtDate(s){return new Date(s+"T12:00").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}
+function fmtStamp(t){return new Date(t).toLocaleDateString("en-GB",{day:"numeric",month:"short"})+" · "+new Date(t).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+
+/* setup */
+let pickedRole=null;
+function pickRole(r){pickedRole=r;
+  document.getElementById('su-parent').classList.toggle('on',r==='parent');
+  document.getElementById('su-family').classList.toggle('on',r==='family');
+  document.getElementById('su-babywrap').classList.toggle('hide',!(r==='parent'&&!settings));
+}
+async function finishSetup(){
+  const name=document.getElementById('su-name').value.trim();
+  const err=document.getElementById('su-err');
+  if(!name||!pickedRole){err.textContent="Add your name and pick who you are.";return}
+  if(pickedRole==='parent'&&!settings){
+    const baby=document.getElementById('su-baby').value.trim();
+    const dob=document.getElementById('su-dob').value;
+    if(!baby||!dob){err.textContent="Add baby's name and date of birth.";return}
+    settings={baby,dob};await sSet('settings',settings,true);
+  }
+  profile={name,role:pickedRole};
+  await sSet('my-profile',profile,false);
+  document.getElementById('setup').classList.add('hide');
+  render();
+}
+function switchUser(){document.getElementById('setup').classList.remove('hide')}
+
+/* updates */
+async function addUpdate(){
+  const t=document.getElementById('up-text').value.trim();if(!t)return;
+  updates.unshift({id:Date.now(),text:t,by:profile.name,at:Date.now(),milestone:document.getElementById('up-milestone').checked});
+  document.getElementById('up-text').value='';document.getElementById('up-milestone').checked=false;
+  await sSet('updates',updates,true);renderFeed();
+}
+async function delUpdate(id){updates=updates.filter(u=>u.id!==id);await sSet('updates',updates,true);renderFeed()}
+function renderFeed(){
+  const f=document.getElementById('feed');
+  if(!updates.length){f.innerHTML='<div class="empty">No updates yet — the first post starts her story.</div>';return}
+  f.innerHTML=updates.map(u=>`
+    <div class="post ${u.milestone?'milestone':''}">
+      ${u.milestone?'<span class="flag">✦ Milestone</span><br>':''}
+      <div class="meta">${esc(u.by)} · ${fmtStamp(u.at)}</div>
+      <p>${esc(u.text)}</p>
+      ${profile.role==='parent'?`<button class="tiny" onclick="delUpdate(${u.id})">remove</button>`:''}
+    </div>`).join('');
+}
+
+/* checklists */
+function ensureLists(){
+  checklists.daily=checklists.daily||{};checklists.weekly=checklists.weekly||{};
+  const dk=todayKey(),wk=weekKey();
+  if(!checklists.daily[dk])checklists.daily[dk]=DAILY_DEFAULTS.map((t,i)=>({id:'d'+i,text:t,done:false}));
+  if(!checklists.weekly[wk])checklists.weekly[wk]=WEEKLY_DEFAULTS.map((t,i)=>({id:'w'+i,text:t,done:false}));
+  wellbeing[dk]=wellbeing[dk]||{mum:WB_MUM.map((t,i)=>({id:'m'+i,text:t,done:false})),dad:WB_DAD.map((t,i)=>({id:'f'+i,text:t,done:false}))};
+  respite[wk]=respite[wk]||RESPITE_IDEAS.map((t,i)=>({id:'r'+i,text:t,done:false}));
+  if(!shifts[wk]){shifts[wk]={};DAYS.forEach(d=>BLOCKS.forEach(b=>shifts[wk][d+'-'+b]='both'))}
+}
+async function toggleItem(kind,id){
+  const key=kind==='daily'?todayKey():weekKey();
+  const it=checklists[kind][key].find(x=>x.id===id);if(it)it.done=!it.done;
+  await sSet('checklists',checklists,true);renderLists();
+}
+async function addItem(kind){
+  const inp=document.getElementById(kind==='daily'?'dl-new':'wk-new');
+  const t=inp.value.trim();if(!t)return;
+  const key=kind==='daily'?todayKey():weekKey();
+  checklists[kind][key].push({id:kind[0]+Date.now(),text:t,done:false});inp.value='';
+  await sSet('checklists',checklists,true);renderLists();
+}
+async function delItem(kind,id){
+  const key=kind==='daily'?todayKey():weekKey();
+  checklists[kind][key]=checklists[kind][key].filter(x=>x.id!==id);
+  await sSet('checklists',checklists,true);renderLists();
+}
+function listHTML(kind,list){
+  return list.map(it=>`
+    <div class="tick ${it.done?'done':''}">
+      <input type="checkbox" ${it.done?'checked':''} onchange="toggleItem('${kind}','${it.id}')" aria-label="${esc(it.text)}">
+      <span>${esc(it.text)}</span>
+      <button class="tiny" onclick="delItem('${kind}','${it.id}')">✕</button>
+    </div>`).join('');
+}
+function renderLists(){
+  ensureLists();
+  const d=checklists.daily[todayKey()],w=checklists.weekly[weekKey()];
+  document.getElementById('dl-date').textContent='· '+fmtDate(todayKey());
+  document.getElementById('daily-list').innerHTML=listHTML('daily',d);
+  document.getElementById('weekly-list').innerHTML=listHTML('weekly',w);
+  document.getElementById('dl-bar').style.width=(d.length?100*d.filter(x=>x.done).length/d.length:0)+'%';
+  document.getElementById('wk-bar').style.width=(w.length?100*w.filter(x=>x.done).length/w.length:0)+'%';
+}
+
+/* wellbeing + respite + shifts */
+async function toggleWB(person,id){
+  const it=wellbeing[todayKey()][person].find(x=>x.id===id);if(it)it.done=!it.done;
+  await sSet('wellbeing',wellbeing,true);renderRest();
+}
+async function toggleRespite(id){
+  const it=respite[weekKey()].find(x=>x.id===id);if(it)it.done=!it.done;
+  await sSet('respite',respite,true);renderRest();
+}
+async function cycleShift(cell){
+  if(profile.role!=='parent')return;
+  const wk=weekKey();
+  const cur=shifts[wk][cell]||'both';
+  shifts[wk][cell]=STATES[(STATES.indexOf(cur)+1)%STATES.length];
+  await sSet('shifts',shifts,true);renderRest();
+}
+function wbHTML(person,list){
+  return list.map(it=>`
+    <div class="tick ${it.done?'done':''}">
+      <input type="checkbox" ${it.done?'checked':''} onchange="toggleWB('${person}','${it.id}')" aria-label="${esc(it.text)}">
+      <span>${esc(it.text)}</span>
+    </div>`).join('');
+}
+function renderRest(){
+  ensureLists();
+  const dk=todayKey(),wk=weekKey();
+  document.getElementById('wb-mum').innerHTML=wbHTML('mum',wellbeing[dk].mum);
+  document.getElementById('wb-dad').innerHTML=wbHTML('dad',wellbeing[dk].dad);
+  const all=[...wellbeing[dk].mum,...wellbeing[dk].dad];
+  document.getElementById('wb-bar').style.width=(100*all.filter(x=>x.done).length/all.length)+'%';
+  const r=respite[wk];
+  document.getElementById('respite-list').innerHTML=r.map(it=>`
+    <div class="tick ${it.done?'done':''}">
+      <input type="checkbox" ${it.done?'checked':''} onchange="toggleRespite('${it.id}')" aria-label="${esc(it.text)}">
+      <span>${esc(it.text)}</span>
+    </div>`).join('');
+  document.getElementById('rs-bar').style.width=(100*r.filter(x=>x.done).length/r.length)+'%';
+  let g='<tr><th></th>'+DAYS.map(d=>'<th>'+d+'</th>').join('')+'</tr>';
+  BLOCKS.forEach(b=>{
+    g+='<tr><th style="text-align:left">'+b+'</th>';
+    DAYS.forEach(d=>{
+      const st=shifts[wk][d+'-'+b]||'both';
+      g+=`<td><button class="chip ${st}" onclick="cycleShift('${d}-${b}')" aria-label="${d} ${b}: ${STATE_LABEL[st]}">${STATE_LABEL[st]}</button></td>`;
+    });
+    g+='</tr>';
+  });
+  document.getElementById('shift-grid').innerHTML=g;
+}
+
+/* support */
+async function claimTask(id){
+  const t=supportTasks.find(x=>x.id===id);if(!t)return;
+  t.claimedBy=t.claimedBy===profile.name?null:profile.name;
+  await sSet('support-tasks',supportTasks,true);renderSupport();
+}
+async function addSupport(){
+  const inp=document.getElementById('sp-new');const t=inp.value.trim();if(!t)return;
+  supportTasks.push({id:Date.now(),text:t,claimedBy:null});inp.value='';
+  await sSet('support-tasks',supportTasks,true);renderSupport();
+}
+async function delSupport(id){supportTasks=supportTasks.filter(x=>x.id!==id);await sSet('support-tasks',supportTasks,true);renderSupport()}
+function nudgeTask(id){
+  const t=supportTasks.find(x=>x.id===id);if(!t)return;
+  const baby=settings?settings.baby:'baby';
+  const msg=`Hi — could anyone cover this for us this week?\n\n"${t.text}"\n\nIf you can, open ${baby}'s app and tap "I'll do this" so we know it's sorted. Thank you 💛`;
+  window.open('https://wa.me/?text='+encodeURIComponent(msg),'_blank');
+}
+function renderSupport(){
+  const el=document.getElementById('support-list');
+  if(!supportTasks.length){el.innerHTML='<div class="empty">No jobs listed yet.</div>';return}
+  el.innerHTML=supportTasks.map(t=>`
+    <div class="task">
+      <div class="info">${esc(t.text)}
+        ${t.claimedBy?`<div class="who">✓ ${esc(t.claimedBy)} has this covered</div>`:''}
+      </div>
+      ${t.claimedBy&&t.claimedBy!==profile.name?'':`<button class="ghost" onclick="claimTask(${t.id})">${t.claimedBy===profile.name?"Un-claim":"I'll do this"}</button>`}
+      ${profile.role==='parent'&&!t.claimedBy?`<button class="ghost" onclick="nudgeTask(${t.id})" title="Send via WhatsApp">Nudge</button>`:''}
+      ${profile.role==='parent'?`<button class="tiny" onclick="delSupport(${t.id})">✕</button>`:''}
+    </div>`).join('');
+}
+
+/* visits */
+async function addSlot(){
+  const d=document.getElementById('vs-date').value,f=document.getElementById('vs-from').value,t=document.getElementById('vs-to').value;
+  if(!d||!f||!t)return;
+  slots.push({id:Date.now(),date:d,from:f,to:t,bookedBy:null});
+  slots.sort((a,b)=>(a.date+a.from).localeCompare(b.date+b.from));
+  await sSet('visit-slots',slots,true);renderSlots();
+}
+async function bookSlot(id){
+  const s=slots.find(x=>x.id===id);if(!s)return;
+  if(s.bookedBy&&s.bookedBy!==profile.name)return;
+  s.bookedBy=s.bookedBy===profile.name?null:profile.name;
+  await sSet('visit-slots',slots,true);renderSlots();
+}
+async function delSlot(id){slots=slots.filter(x=>x.id!==id);await sSet('visit-slots',slots,true);renderSlots()}
+function renderSlots(){
+  const el=document.getElementById('slot-list');
+  const up=slots.filter(s=>s.date>=todayKey());
+  if(!up.length){el.innerHTML='<div class="empty">No slots open yet — check back soon.</div>';return}
+  let html='',last='';
+  up.forEach(s=>{
+    if(s.date!==last){html+=`<div class="datehead">${fmtDate(s.date)}</div>`;last=s.date}
+    const mine=s.bookedBy===profile.name;
+    html+=`<div class="slot">
+      <div style="flex:1"><span class="t">${s.from} – ${s.to}</span>
+        ${s.bookedBy?`<span class="badge booked">${mine?'You':esc(s.bookedBy)}</span>`:'<span class="badge">Free</span>'}
+      </div>
+      ${(!s.bookedBy||mine)?`<button class="ghost" onclick="bookSlot(${s.id})">${mine?'Cancel':'Book'}</button>`:''}
+      ${profile.role==='parent'?`<button class="tiny" onclick="delSlot(${s.id})">✕</button>`:''}
+    </div>`;
+  });
+  el.innerHTML=html;
+}
+
+/* render + init */
+function show(name){
+  ['updates','lists','support','visits','rest'].forEach(n=>{
+    document.getElementById('sec-'+n).classList.toggle('hide',n!==name);
+    document.getElementById('tab-'+n).classList.toggle('on',n===name);
+  });
+}
+function render(){
+  document.getElementById('h-baby').textContent=settings?settings.baby:'';
+  if(settings&&settings.dob){
+    const days=Math.floor((Date.now()-new Date(settings.dob+"T00:00"))/864e5)+1;
+    document.getElementById('h-day').textContent='Day '+days;
+    document.getElementById('h-sub').textContent='of her journey · born '+fmtDate(settings.dob);
+  }
+  document.getElementById('h-hello').innerHTML=
+    `Hi ${esc(profile.name)} · <button onclick="switchUser()">not you?</button>`+
+    (memOnly?'<br><span style="color:var(--rose-deep)">Saving unavailable — changes may not persist</span>':'');
+  document.querySelectorAll('.parent-only').forEach(e=>e.classList.toggle('hide',profile.role!=='parent'));
+  document.querySelectorAll('.family-only').forEach(e=>e.classList.toggle('hide',profile.role==='parent'));
+  document.getElementById('post-composer').classList.toggle('hide',profile.role!=='parent');
+  renderFeed();renderLists();renderSupport();renderSlots();renderRest();
+}
+(async function init(){
+  profile=await sGet('my-profile',false);
+  settings=await sGet('settings',true);
+  updates=await sGet('updates',true)||[];
+  checklists=await sGet('checklists',true)||{};
+  supportTasks=await sGet('support-tasks',true);
+  wellbeing=await sGet('wellbeing',true)||{};
+  shifts=await sGet('shifts',true)||{};
+  respite=await sGet('respite',true)||{};
+  if(!supportTasks){supportTasks=SUPPORT_DEFAULTS.concat(SUPPORT_V2).map((t,i)=>({id:i+1,text:t,claimedBy:null}));await sSet('support-tasks',supportTasks,true)}
+  else{
+    const v=await sGet('app-version',true);
+    if(!v||v<2){
+      const have=new Set(supportTasks.map(t=>t.text));
+      SUPPORT_V2.forEach((t,i)=>{if(!have.has(t))supportTasks.push({id:Date.now()+i,text:t,claimedBy:null})});
+      await sSet('support-tasks',supportTasks,true);
+      await sSet('app-version',2,true);
+    }
+  }
+  slots=await sGet('visit-slots',true)||[];
+  ensureLists();
+  if(profile&&(settings||profile.role==='family')){
+    document.getElementById('setup').classList.add('hide');render();
+  }else{
+    if(profile){document.getElementById('su-name').value=profile.name;pickRole(profile.role)}
+  }
+})();
+</script>

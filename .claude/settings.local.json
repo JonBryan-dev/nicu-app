@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(supabase projects *)",
+      "Read(//Users/admin/.supabase/**)",
+      "Bash(npx --version)"
+    ]
+  }
+}
