@@ -20,7 +20,9 @@ export function createClient() {
               cookieStore.set(name, value, options)
             );
           } catch {
-            // called from a Server Component — middleware refreshes sessions
+            // called from a Server Component, which can't set cookies — safe to
+            // ignore: the browser client refreshes the session and Route Handlers
+            // (e.g. /auth/callback) persist cookies.
           }
         },
       },
