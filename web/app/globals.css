@@ -458,6 +458,114 @@ label {
   color: var(--rose-deep);
   margin-top: 4px;
 }
+/* ---------- updates composer: firsts, guided, photos ---------- */
+.firsts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+.firstchip {
+  border: 1px solid var(--mist);
+  background: var(--linen);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: 600 0.76rem var(--font-nunito), sans-serif;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.firstchip.on {
+  background: var(--rose-deep);
+  border-color: var(--rose-deep);
+  color: #fff;
+}
+.guided > label:first-child {
+  margin-top: 0;
+}
+.composer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+.milestone-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--rose-deep);
+}
+.milestone-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--rose-deep);
+}
+.thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.thumb {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--mist);
+}
+.thumb button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: var(--ink);
+  color: #fff;
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.photos {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0 4px;
+  grid-template-columns: 1fr;
+}
+.photos.n2 {
+  grid-template-columns: 1fr 1fr;
+}
+.photos.n3 {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.photos img {
+  width: 100%;
+  max-height: 340px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--mist);
+}
+.photos.n2 img,
+.photos.n3 img {
+  aspect-ratio: 1 / 1;
+  max-height: none;
+}
+.photo-skel {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  background: var(--mist);
+}
 .hide {
   display: none !important;
 }
