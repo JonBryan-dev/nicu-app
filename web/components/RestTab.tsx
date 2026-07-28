@@ -43,7 +43,38 @@ export default function RestTab() {
       map[`${b.day_name}-${b.block_name}`] = b.assignee;
     }
     setShifts(map);
-  }, [supabase, family.id, weekKey]);
+
+    // reconcile: every "family" block this week has exactly one support job,
+    // and linked jobs whose block moved off "family" are cleaned up
+    if (isParent) {
+      const { data: linked } = await supabase
+        .from("support_tasks")
+        .select("id, shift_day, shift_block")
+        .eq("family_id", family.id)
+        .eq("shift_week", weekKey);
+      const jobs = (linked as { id: string; shift_day: string; shift_block: string }[]) ?? [];
+      const blockLabel: Record<string, string> = { AM: "morning", PM: "afternoon", Eve: "evening" };
+      const first = family.baby_name.split(" ")[0];
+      for (const [key, assignee] of Object.entries(map)) {
+        const [day, block] = key.split("-");
+        const job = jobs.find((j) => j.shift_day === day && j.shift_block === block);
+        if (assignee === "family" && !job) {
+          // duplicate inserts from a second phone are blocked by the unique index
+          await supabase.from("support_tasks").insert({
+            family_id: family.id,
+            task_text: `Sit with ${first} — ${day} ${blockLabel[block] ?? block}`,
+            created_by: profile.id,
+            at_hospital: true,
+            shift_week: weekKey,
+            shift_day: day,
+            shift_block: block,
+          });
+        } else if (assignee !== "family" && job) {
+          await supabase.from("support_tasks").delete().eq("id", job.id);
+        }
+      }
+    }
+  }, [supabase, family.id, isParent, profile.id, weekKey]);
 
   const loadItems = useCallback(async () => {
     if (!isParent) return; // respite is mum & dad's private space
