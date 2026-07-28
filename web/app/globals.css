@@ -655,6 +655,13 @@ label {
   color: var(--ink-soft);
   margin-left: 4px;
 }
+.installsteps {
+  margin: 0 0 4px 20px;
+  padding: 0;
+}
+.installsteps li {
+  padding: 4px 0;
+}
 .whoreacted {
   font-size: 0.78rem;
   color: var(--ink-soft);

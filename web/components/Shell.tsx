@@ -7,6 +7,7 @@ import { useFamily } from "@/components/FamilyProvider";
 import { dayNumber, fmtDate } from "@/lib/dates";
 import type { Profile } from "@/lib/types";
 import PushPrompt from "@/components/PushPrompt";
+import InstallPrompt from "@/components/InstallPrompt";
 import ThemePicker from "@/components/ThemePicker";
 
 function InviteShare({ code, baby }: { code?: string; baby: string }) {
@@ -207,6 +208,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </p>
         </div>
       )}
+
+      <InstallPrompt />
 
       <PushPrompt />
 
