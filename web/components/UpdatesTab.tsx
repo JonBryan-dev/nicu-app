@@ -22,7 +22,12 @@ type CommentRow = {
   created_at: string;
   author?: { display_name: string } | null;
 };
-type ReactionRow = { update_id: string; profile_id: string; emoji: string };
+type ReactionRow = {
+  update_id: string;
+  profile_id: string;
+  emoji: string;
+  reactor?: { display_name: string } | null;
+};
 
 const isVideo = (path: string) => /\.(mp4|mov|m4v|webm|ogv)$/i.test(path);
 
@@ -66,7 +71,7 @@ export default function UpdatesTab() {
         .order("created_at"),
       supabase
         .from("update_reactions")
-        .select("update_id, profile_id, emoji")
+        .select("update_id, profile_id, emoji, reactor:profiles!update_reactions_profile_id_fkey(display_name)")
         .eq("family_id", family.id),
     ]);
     const rows = (u.data as Update[]) ?? [];
@@ -387,6 +392,7 @@ export default function UpdatesTab() {
                 {REACTION_SET.map((e) => {
                   const rs = (reactions[u.id] ?? []).filter((r) => r.emoji === e);
                   const mine = rs.some((r) => r.profile_id === profile.id);
+                  const names = rs.map((r) => r.reactor?.display_name ?? "Someone").join(", ");
                   return (
                     <button
                       key={e}
@@ -394,7 +400,8 @@ export default function UpdatesTab() {
                       className={mine ? "on" : ""}
                       onClick={() => toggleReaction(u.id, e)}
                       aria-pressed={mine}
-                      aria-label={`React ${e}`}
+                      aria-label={`React ${e}${names ? ` — ${names}` : ""}`}
+                      title={names || undefined}
                     >
                       {e}
                       {rs.length > 0 && <span className="rcount">{rs.length}</span>}
@@ -407,6 +414,21 @@ export default function UpdatesTab() {
                   </button>
                 )}
               </div>
+              {(reactions[u.id]?.length ?? 0) > 0 && (
+                <p className="whoreacted">
+                  {REACTION_SET.filter((e) =>
+                    (reactions[u.id] ?? []).some((r) => r.emoji === e)
+                  )
+                    .map(
+                      (e) =>
+                        `${e} ${(reactions[u.id] ?? [])
+                          .filter((r) => r.emoji === e)
+                          .map((r) => r.reactor?.display_name ?? "Someone")
+                          .join(", ")}`
+                    )
+                    .join(" · ")}
+                </p>
+              )}
 
               {/* comments */}
               {(comments[u.id] ?? []).map((c) => (

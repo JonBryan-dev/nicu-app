@@ -655,6 +655,23 @@ label {
   color: var(--ink-soft);
   margin-left: 4px;
 }
+.whoreacted {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  margin-top: 6px;
+}
+.memberrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--mist);
+  font-weight: 600;
+}
+.memberrow:last-of-type {
+  border-bottom: none;
+}
 .comment {
   font-size: 0.85rem;
   padding: 7px 0 3px;

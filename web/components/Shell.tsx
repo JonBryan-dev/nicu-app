@@ -2,9 +2,10 @@
 // Shell — persistent hero (baby name, Day N, born line) + sticky pill tabs.
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFamily } from "@/components/FamilyProvider";
 import { dayNumber, fmtDate } from "@/lib/dates";
+import type { Profile } from "@/lib/types";
 import PushPrompt from "@/components/PushPrompt";
 import ThemePicker from "@/components/ThemePicker";
 
@@ -58,6 +59,17 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [showCodes, setShowCodes] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
+  const [members, setMembers] = useState<(Profile & { created_at?: string })[]>([]);
+
+  useEffect(() => {
+    if (!showCodes || !isParent) return;
+    supabase
+      .from("profiles")
+      .select("id, display_name, role, created_at")
+      .eq("family_id", family.id)
+      .order("created_at")
+      .then(({ data }) => setMembers((data as (Profile & { created_at?: string })[]) ?? []));
+  }, [showCodes, isParent, supabase, family.id]);
   const [pw, setPw] = useState("");
   const [pwMsg, setPwMsg] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
@@ -167,6 +179,32 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               <InviteShare code={family.team_code} baby={family.baby_name} />
             </>
           )}
+
+          <label>Who&apos;s here ({members.length})</label>
+          {members.map((m) => (
+            <div key={m.id} className="memberrow">
+              <span>
+                {m.display_name}
+                {m.id === profile.id && <span className="muted"> (you)</span>}
+              </span>
+              <span
+                className="badge"
+                style={
+                  m.role === "parent"
+                    ? { background: "var(--rose-deep)", color: "var(--on-accent)" }
+                    : m.role === "team"
+                      ? { background: "var(--sky)", color: "var(--on-accent)" }
+                      : undefined
+                }
+              >
+                {m.role === "parent" ? "Parent" : m.role === "team" ? "NICU team" : "Family"}
+              </span>
+            </div>
+          ))}
+          <p className="muted" style={{ marginTop: 8 }}>
+            Need to remove someone? That&apos;s done from the Supabase dashboard
+            for now — ask Claude.
+          </p>
         </div>
       )}
 
