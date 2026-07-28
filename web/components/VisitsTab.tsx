@@ -13,7 +13,10 @@ export default function VisitsTab() {
   const [date, setDate] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [repeat, setRepeat] = useState<"none" | "daily" | "weekdays" | "weekends">("none");
+  const [until, setUntil] = useState("");
   const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -34,13 +37,52 @@ export default function VisitsTab() {
   async function addSlot(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
+    setMsg("");
     if (!date || !from || !to) return;
-    const { error } = await supabase.from("visit_slots").insert({
-      family_id: family.id,
-      slot_date: date,
-      start_time: from,
-      end_time: to,
-    });
+
+    // build the list of dates: one, or a repeated run (capped at 31 days)
+    const dates: string[] = [];
+    if (repeat === "none") {
+      dates.push(date);
+    } else {
+      if (!until) {
+        setErr("Pick an end date for the repeat.");
+        return;
+      }
+      if (until < date) {
+        setErr("The repeat end date is before the start date.");
+        return;
+      }
+      const d = new Date(date + "T12:00:00");
+      const end = new Date(until + "T12:00:00");
+      let guard = 0;
+      while (d <= end && guard++ < 31) {
+        const dow = d.getDay();
+        const keep =
+          repeat === "daily" ||
+          (repeat === "weekdays" && dow >= 1 && dow <= 5) ||
+          (repeat === "weekends" && (dow === 0 || dow === 6));
+        if (keep) {
+          dates.push(
+            `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+          );
+        }
+        d.setDate(d.getDate() + 1);
+      }
+      if (!dates.length) {
+        setErr("No days match that repeat in the range you picked.");
+        return;
+      }
+    }
+
+    const { error } = await supabase.from("visit_slots").insert(
+      dates.map((slot_date) => ({
+        family_id: family.id,
+        slot_date,
+        start_time: from,
+        end_time: to,
+      }))
+    );
     if (error) {
       setErr(
         error.message.includes("end_time")
@@ -49,9 +91,12 @@ export default function VisitsTab() {
       );
       return;
     }
+    setMsg(dates.length > 1 ? `Opened ${dates.length} slots.` : "Slot opened.");
     setDate("");
     setFrom("");
     setTo("");
+    setRepeat("none");
+    setUntil("");
     load();
   }
 
@@ -120,12 +165,40 @@ export default function VisitsTab() {
               />
             </div>
           </div>
+          <div className="row wrap" style={{ marginTop: 10 }}>
+            <div>
+              <label htmlFor="vs-repeat">Repeat</label>
+              <select
+                id="vs-repeat"
+                value={repeat}
+                onChange={(e) => setRepeat(e.target.value as typeof repeat)}
+              >
+                <option value="none">Just this day</option>
+                <option value="daily">Every day</option>
+                <option value="weekdays">Weekdays</option>
+                <option value="weekends">Weekends</option>
+              </select>
+            </div>
+            {repeat !== "none" && (
+              <div>
+                <label htmlFor="vs-until">Until</label>
+                <input
+                  id="vs-until"
+                  type="date"
+                  value={until}
+                  min={date || todayKey()}
+                  onChange={(e) => setUntil(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
           <div style={{ marginTop: 12 }}>
             <button className="primary" type="submit">
-              Open slot
+              {repeat === "none" ? "Open slot" : "Open slots"}
             </button>
           </div>
           {err && <p className="err">{err}</p>}
+          {msg && <p className="muted" style={{ marginTop: 8 }}>{msg}</p>}
         </form>
       )}
 

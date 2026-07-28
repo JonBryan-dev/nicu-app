@@ -14,7 +14,7 @@ const TABS = [
   { href: "/lists", label: "Lists", icon: "☑️", parentOnly: true },
   { href: "/support", label: "Support", icon: "💛" },
   { href: "/visits", label: "Visits", icon: "📅" },
-  { href: "/rest", label: "Rest", icon: "😴" },
+  { href: "/rest", label: "Rest", icon: "😴", parentOnly: true },
 ];
 
 export default function Shell({ children }: { children: React.ReactNode }) {

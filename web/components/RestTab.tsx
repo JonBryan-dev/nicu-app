@@ -149,6 +149,16 @@ export default function RestTab() {
     loadItems();
   }
 
+  if (!isParent) {
+    return (
+      <section>
+        <div className="card">
+          <div className="empty">This one&apos;s just for mum &amp; dad.</div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section>
       <div className="card">
