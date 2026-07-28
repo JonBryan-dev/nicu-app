@@ -5,6 +5,7 @@
 import { createClient } from "@supabase/supabase-js";
 import {
   computeSchedule,
+  babyFeedTimes,
   DEFAULT_SETTINGS,
   type FeedSettingsRow,
   type SleepWindowRow,
@@ -99,20 +100,35 @@ export async function GET(
     started_at: new Date(+new Date(f.started_at) + off).toISOString(),
   }));
 
-  // today's planned feeds (skip already-logged ones)
-  const schedule = computeSchedule(settings, feedsShifted, feed.sleep_windows, feed.slots, nowLondon);
+  // today's remaining pump sessions
+  const schedule = computeSchedule(settings, feedsShifted, feed.sleep_windows, feed.slots, nowLondon, { pumping: true });
   schedule
     .filter((s) => !s.logged)
     .forEach((s, i) => {
       const end = new Date(+s.at + 30 * 60000);
-      const who =
-        s.assigned === "unit"
-          ? " — unit (both asleep)"
-          : s.assigned
-            ? ` — ${s.assigned}`
-            : "";
-      events.push(vevent(`feed-${i}-${dt(s.at)}@nicu`, dt(s.at), dt(end), `🍼 ${baby} feed${who}`));
+      const note = s.assigned === "clash" ? " (clashes with sleep)" : "";
+      events.push(vevent(`pump-${i}-${dt(s.at)}@nicu`, dt(s.at), dt(end), `🥛 Pump${note}`));
     });
+
+  // baby's ward-set feed times, today and tomorrow
+  for (let d = 0; d < 2; d++) {
+    const day = new Date(nowLondon);
+    day.setDate(day.getDate() + d);
+    const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+    for (const t of babyFeedTimes(settings, feed.slots, day)) {
+      const [hh, mm] = t.time.split(":").map(Number);
+      const endMin = hh * 60 + mm + 30;
+      const endT = `${String(Math.floor((endMin % 1440) / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
+      events.push(
+        vevent(
+          `babyfeed-${dateStr}-${t.time}@nicu`,
+          dtFrom(dateStr, t.time),
+          dtFrom(dateStr, endT),
+          `🍼 ${baby} feed (unit)`
+        )
+      );
+    }
+  }
 
   // visiting slots (14 days)
   for (const s of feed.slots) {

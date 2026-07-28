@@ -9,6 +9,8 @@ import { useRealtime } from "@/lib/useRealtime";
 import {
   computeSchedule,
   computeGaps,
+  babyFeedTimes,
+  babyFeedsPerDay,
   fmtHM,
   DEFAULT_SETTINGS,
   type FeedSettingsRow,
@@ -62,7 +64,7 @@ export default function FeedsTab() {
   const [exprToday, setExprToday] = useState(0);
   const [exprMl, setExprMl] = useState("");
   const [finishMl, setFinishMl] = useState("");
-  const [finishMethod, setFinishMethod] = useState("bottle");
+  const [finishMethod, setFinishMethod] = useState("pump");
   const [tick, setTick] = useState(0);
   const [showPlan, setShowPlan] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export default function FeedsTab() {
   const [showPast, setShowPast] = useState(false);
   const [pastTime, setPastTime] = useState("");
   const [pastMl, setPastMl] = useState("");
-  const [pastMethod, setPastMethod] = useState("bottle");
+  const [pastMethod, setPastMethod] = useState("pump");
   const [err, setErr] = useState("");
 
   const dayKey = todayKey();
@@ -118,14 +120,15 @@ export default function FeedsTab() {
   }, [openFeed]);
 
   const schedule = useMemo(
-    () => computeSchedule(settings, feeds, windows, slots),
+    () => computeSchedule(settings, feeds, windows, slots, new Date(), { pumping: true }),
     [settings, feeds, windows, slots]
   );
   const gaps = useMemo(() => computeGaps(settings), [settings]);
+  const babyTimes = useMemo(() => babyFeedTimes(settings, slots), [settings, slots]);
 
-  const consumedToday = feeds.filter((f) => f.method !== "pump").reduce((a, f) => a + (f.ml ?? 0), 0);
-  const pumpedToday = feeds.filter((f) => f.method === "pump").reduce((a, f) => a + (f.ml ?? 0), 0);
+  const pumpedToday = feeds.reduce((a, f) => a + (f.ml ?? 0), 0);
   const expressedToday = exprToday + pumpedToday;
+  const babyNeedsPerDay = babyFeedsPerDay(settings) * (settings.baby_ml ?? 0);
 
   if (!isParent) {
     return (
@@ -150,6 +153,7 @@ export default function FeedsTab() {
       family_id: family.id,
       fed_by: profile.id,
       started_at: new Date().toISOString(),
+      method: "pump",
     });
     if (error) setErr(error.message);
     load();
@@ -258,9 +262,37 @@ export default function FeedsTab() {
 
   return (
     <section>
-      {/* timer */}
+      {/* baby's ward-set feeds */}
       <div className="card">
-        <h2>Feed timer</h2>
+        <h2>{family.baby_name}&apos;s feeds <span className="muted">· set by the unit</span></h2>
+        {babyTimes.length === 0 ? (
+          <p className="note">
+            Add the unit&apos;s plan under <b>Edit the plan</b> below (first feed, how often, ml) and her day appears here.
+          </p>
+        ) : (
+          <>
+            <p className="muted" style={{ marginBottom: 6 }}>
+              {babyTimes.length} feeds · {settings.baby_ml ?? "?"} ml each · {babyNeedsPerDay ? `${babyNeedsPerDay} ml/day` : ""}
+            </p>
+            {babyTimes.map((t) => (
+              <div key={t.time} className="feedrow">
+                <span className="t">🍼 {t.time}</span>
+                <span className="info">
+                  {t.duringVisit
+                    ? t.duringVisit === "free slot"
+                      ? "during an open slot"
+                      : `during ${t.duringVisit}'s visit`
+                    : ""}
+                </span>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* pump timer */}
+      <div className="card">
+        <h2>Pump timer</h2>
         {openFeed ? (
           <>
             <div className="timer">
@@ -270,7 +302,7 @@ export default function FeedsTab() {
             <div className="row wrap" style={{ marginTop: 10 }}>
               <div>
                 <label htmlFor="fin-ml">Amount (ml)</label>
-                <input id="fin-ml" type="text" inputMode="numeric" value={finishMl} onChange={(e) => setFinishMl(e.target.value)} placeholder={settings.target_ml ? String(settings.target_ml) : "40"} />
+                <input id="fin-ml" type="text" inputMode="numeric" value={finishMl} onChange={(e) => setFinishMl(e.target.value)} placeholder={settings.target_ml ? String(settings.target_ml) : "60"} />
               </div>
               <div>
                 <label htmlFor="fin-method">How</label>
@@ -283,11 +315,11 @@ export default function FeedsTab() {
           </>
         ) : (
           <>
-            <p className="note">Starting the timer logs the feed (or pump) and re-plans the rest of today.</p>
+            <p className="note">Starting the timer logs the pump and re-plans the rest of today&apos;s sessions.</p>
             <div className="row">
-              <button className="primary" onClick={startFeed} style={{ flex: "0 0 auto" }}>Start feed now</button>
+              <button className="primary" onClick={startFeed} style={{ flex: "0 0 auto" }}>Start pumping now</button>
               <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setShowPast((s) => !s)}>
-                Log a past feed
+                Log a past one
               </button>
             </div>
             {showPast && (
@@ -299,14 +331,14 @@ export default function FeedsTab() {
                   </div>
                   <div>
                     <label htmlFor="pf-ml">Amount (ml)</label>
-                    <input id="pf-ml" type="text" inputMode="numeric" value={pastMl} onChange={(e) => setPastMl(e.target.value)} placeholder="40" />
+                    <input id="pf-ml" type="text" inputMode="numeric" value={pastMl} onChange={(e) => setPastMl(e.target.value)} placeholder="60" />
                   </div>
                   <div>
                     <label htmlFor="pf-m">How</label>
                     <MethodSelect id="pf-m" value={pastMethod} onChange={setPastMethod} />
                   </div>
                 </div>
-                <button className="ghost" style={{ marginTop: 10 }} type="submit">Save feed</button>
+                <button className="ghost" style={{ marginTop: 10 }} type="submit">Save</button>
               </form>
             )}
           </>
@@ -314,14 +346,14 @@ export default function FeedsTab() {
         {err && <p className="err">{err}</p>}
       </div>
 
-      {/* today's grid */}
+      {/* today's pumping grid */}
       <div className="card">
-        <h2>Today&apos;s feeds</h2>
+        <h2>Your pumping today</h2>
         <p className="muted" style={{ marginBottom: 6 }}>
           Day gaps ≈ {Math.round(gaps.dayGap / 6) / 10}h · overnight {Math.round(gaps.nightGap / 6) / 10}h
         </p>
         {schedule.length === 0 ? (
-          <div className="empty">Start the first feed and today&apos;s plan appears here.</div>
+          <div className="empty">Start the first pump and today&apos;s plan appears here.</div>
         ) : (
           schedule.map((s, i) => {
             const rec = s.logged ? feeds.find((f) => Math.abs(+new Date(f.started_at) - +s.at) < 1000) : undefined;
@@ -351,15 +383,13 @@ export default function FeedsTab() {
                     <span className="info" style={{ flex: 1 }}>
                       {s.logged
                         ? [
-                            rec?.method === "pump" ? "pumped" : null,
+                            rec && rec.method !== "pump" ? rec.method : null,
                             s.ml != null ? `${s.ml} ml` : "logged",
                           ].filter(Boolean).join(" · ")
                         : [
-                            s.assigned === "unit"
-                              ? "both asleep — the unit's got this one 💤"
-                              : s.assigned
-                                ? `${s.assigned}'s (protected sleep)`
-                                : null,
+                            s.assigned === "clash"
+                              ? "⚠ lands in Mum's protected sleep"
+                              : null,
                             s.duringVisit ? (s.duringVisit === "free slot" ? "during an open slot" : `during ${s.duringVisit}'s visit`) : null,
                           ].filter(Boolean).join(" · ") || "planned"}
                     </span>
@@ -379,26 +409,26 @@ export default function FeedsTab() {
         <h2>Supply &amp; demand today</h2>
         <div className="supply">
           <div>
-            <div className="big">{consumedToday} ml</div>
-            <div className="muted">taken by baby</div>
+            <div className="big">{babyNeedsPerDay || "—"} ml</div>
+            <div className="muted">{family.baby_name.split(" ")[0]} needs / day</div>
           </div>
           <div>
             <div className="big">{expressedToday} ml</div>
-            <div className="muted">expressed{pumpedToday ? ` (incl. ${pumpedToday} pumped)` : ""}</div>
+            <div className="muted">you&apos;ve expressed</div>
           </div>
           <div>
-            <div className="big" style={{ color: expressedToday - consumedToday >= 0 ? "var(--sage)" : "var(--rose-deep)" }}>
-              {expressedToday - consumedToday >= 0 ? "+" : ""}{expressedToday - consumedToday} ml
+            <div className="big" style={{ color: expressedToday - babyNeedsPerDay >= 0 ? "var(--sage)" : "var(--rose-deep)" }}>
+              {expressedToday - babyNeedsPerDay >= 0 ? "+" : ""}{expressedToday - babyNeedsPerDay} ml
             </div>
-            <div className="muted">difference</div>
+            <div className="muted">vs her day&apos;s needs</div>
           </div>
         </div>
         <form className="row" style={{ marginTop: 10 }} onSubmit={logExpressing}>
-          <input type="text" inputMode="numeric" value={exprMl} onChange={(e) => setExprMl(e.target.value)} placeholder="Log expressing (ml)…" aria-label="Expressed millilitres" />
+          <input type="text" inputMode="numeric" value={exprMl} onChange={(e) => setExprMl(e.target.value)} placeholder="Quick-log expressed ml…" aria-label="Expressed millilitres" />
           <button className="ghost" style={{ flex: "0 0 auto" }} type="submit">Add</button>
         </form>
         <p className="muted" style={{ marginTop: 8 }}>
-          Trends here are a guide — changes to feeding or expressing are a chat with your unit.
+          A steady surplus builds the freezer stash; what to change is always a chat with your unit.
         </p>
       </div>
 
@@ -409,12 +439,34 @@ export default function FeedsTab() {
           <button className="ghost" onClick={() => setShowPlan(true)}>Edit the plan</button>
         ) : (
           <>
+            <h3>{family.baby_name.split(" ")[0]}&apos;s feeds (unit&apos;s plan)</h3>
             <div className="row wrap">
               <div>
-                <label>Feeds in 24h</label>
+                <label>First feed</label>
+                <input type="time" value={settings.baby_first_feed?.slice(0, 5) ?? ""} onChange={(e) => saveSettings({ baby_first_feed: e.target.value || null })} />
+              </div>
+              <div>
+                <label>How often</label>
+                <select value={settings.baby_interval_min ?? 0} onChange={(e) => saveSettings({ baby_interval_min: +e.target.value || null })}>
+                  <option value={0}>Not set</option>
+                  <option value={120}>2-hourly</option>
+                  <option value={180}>3-hourly</option>
+                  <option value={240}>4-hourly</option>
+                </select>
+              </div>
+              <div>
+                <label>ml per feed</label>
+                <input type="text" inputMode="numeric" defaultValue={settings.baby_ml ?? ""} onBlur={(e) => saveSettings({ baby_ml: e.target.value ? +e.target.value : null })} placeholder="40" />
+              </div>
+            </div>
+
+            <h3>Your pumping</h3>
+            <div className="row wrap">
+              <div>
+                <label>Pumps in 24h</label>
                 <select value={settings.feeds_per_day ?? 8} onChange={(e) => saveSettings({ feeds_per_day: +e.target.value })}>
                   {[6, 7, 8, 9, 10, 11, 12].map((n) => (
-                    <option key={n} value={n}>{n} feeds</option>
+                    <option key={n} value={n}>{n} pumps</option>
                   ))}
                 </select>
               </div>
@@ -437,12 +489,12 @@ export default function FeedsTab() {
                 <input type="time" value={settings.night_from.slice(0, 5)} onChange={(e) => saveSettings({ night_from: e.target.value })} />
               </div>
               <div>
-                <label>Target ml/feed</label>
-                <input type="text" inputMode="numeric" defaultValue={settings.target_ml ?? ""} onBlur={(e) => saveSettings({ target_ml: e.target.value ? +e.target.value : null })} placeholder="40" />
+                <label>Target ml/pump</label>
+                <input type="text" inputMode="numeric" defaultValue={settings.target_ml ?? ""} onBlur={(e) => saveSettings({ target_ml: e.target.value ? +e.target.value : null })} placeholder="60" />
               </div>
             </div>
             <p className="muted" style={{ marginTop: 6 }}>
-              Day gaps work out at ≈ {Math.round(gaps.dayGap / 6) / 10}h with this plan.
+              Pump gaps work out at ≈ {Math.round(gaps.dayGap / 6) / 10}h by day with this plan.
             </p>
 
             {(["mum", "dad"] as const).map((person) => (

@@ -12,6 +12,10 @@ export interface FeedSettingsRow {
   night_from: string;
   target_ml: number | null;
   feeds_per_day?: number | null; // when set, day gaps auto-computed
+  // baby's ward-set feed plan (the unit does the feeds)
+  baby_first_feed?: string | null; // 'HH:MM'
+  baby_interval_min?: number | null;
+  baby_ml?: number | null;
 }
 export interface SleepWindowRow {
   id?: string;
@@ -34,8 +38,9 @@ export interface ScheduleEntry {
   at: Date;
   logged: boolean;
   ml?: number | null;
-  // 'Mum'/'Dad' = the awake parent; 'unit' = both asleep, the ward covers it
-  assigned: "Mum" | "Dad" | "unit" | null;
+  // feeds: 'Mum'/'Dad' = the awake parent; 'unit' = both asleep, ward covers.
+  // pumping: 'clash' = lands inside Mum's protected sleep.
+  assigned: "Mum" | "Dad" | "unit" | "clash" | null;
   duringVisit: string | null; // booker name or 'free slot'
 }
 
@@ -90,11 +95,16 @@ function intervalAt(minOfDay: number, s: FeedSettingsRow): number {
 
 function assignFor(
   minOfDay: number,
-  windows: SleepWindowRow[]
-): "Mum" | "Dad" | "unit" | null {
+  windows: SleepWindowRow[],
+  pumping: boolean
+): "Mum" | "Dad" | "unit" | "clash" | null {
   const mumAsleep = windows.some(
     (w) => w.person === "mum" && inWindow(minOfDay, w.start_time, w.end_time)
   );
+  if (pumping) {
+    // only Mum pumps — flag anything that lands in her protected sleep
+    return mumAsleep ? "clash" : null;
+  }
   const dadAsleep = windows.some(
     (w) => w.person === "dad" && inWindow(minOfDay, w.start_time, w.end_time)
   );
@@ -128,8 +138,10 @@ export function computeSchedule(
   feedsToday: FeedRow[],
   windows: SleepWindowRow[],
   slots: SlotRow[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  opts: { pumping?: boolean } = {}
 ): ScheduleEntry[] {
+  const pumping = opts.pumping ?? false;
   const entries: ScheduleEntry[] = [];
   const sorted = [...feedsToday].sort(
     (a, b) => +new Date(a.started_at) - +new Date(b.started_at)
@@ -173,7 +185,7 @@ export function computeSchedule(
       entries.push({
         at: new Date(anchor),
         logged: false,
-        assigned: assignFor(aMin, windows),
+        assigned: assignFor(aMin, windows, pumping),
         duringVisit: visitFor(anchor, slots),
       });
     }
@@ -181,7 +193,7 @@ export function computeSchedule(
     entries.push({
       at: new Date(t),
       logged: false,
-      assigned: assignFor(mm, windows),
+      assigned: assignFor(mm, windows, pumping),
       duringVisit: visitFor(t, slots),
     });
   }
@@ -190,4 +202,29 @@ export function computeSchedule(
 
 export function fmtHM(d: Date): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/** Baby's ward-set feed times across 24h, flagged when they land in a visit. */
+export function babyFeedTimes(
+  s: FeedSettingsRow,
+  slots: SlotRow[],
+  today: Date = new Date()
+): { time: string; duringVisit: string | null }[] {
+  if (!s.baby_first_feed || !s.baby_interval_min) return [];
+  const count = Math.max(1, Math.floor(1440 / s.baby_interval_min));
+  const start = toMin(s.baby_first_feed);
+  const out: { time: string; duringVisit: string | null }[] = [];
+  for (let i = 0; i < count; i++) {
+    const m = (start + i * s.baby_interval_min) % 1440;
+    const t = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    const at = new Date(today);
+    at.setHours(Math.floor(m / 60), m % 60, 0, 0);
+    out.push({ time: t, duringVisit: visitFor(at, slots) });
+  }
+  return out.sort((a, b) => a.time.localeCompare(b.time));
+}
+
+/** Number of ward feeds per 24h under the unit plan (0 if unset). */
+export function babyFeedsPerDay(s: FeedSettingsRow): number {
+  return s.baby_interval_min ? Math.max(1, Math.floor(1440 / s.baby_interval_min)) : 0;
 }
