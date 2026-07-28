@@ -17,6 +17,8 @@ export default function ListsTab() {
   const [weekly, setWeekly] = useState<ChecklistItem[]>([]);
   const [newDaily, setNewDaily] = useState("");
   const [newWeekly, setNewWeekly] = useState("");
+  const [dailyRoutine, setDailyRoutine] = useState(false);
+  const [weeklyRoutine, setWeeklyRoutine] = useState(false);
 
   const load = useCallback(async () => {
     if (!isParent) return; // Lists is mum & dad's private space
@@ -26,6 +28,7 @@ export default function ListsTab() {
       .eq("family_id", family.id)
       .in("list_type", ["daily", "weekly"])
       .in("scope_key", [dayKey, weekKey])
+      .eq("skipped", false)
       .order("sort_order")
       .order("created_at");
     const items = (data as ChecklistItem[]) ?? [];
@@ -51,21 +54,64 @@ export default function ListsTab() {
     load();
   }
 
-  async function remove(item: ChecklistItem) {
-    await supabase.from("checklist_items").delete().eq("id", item.id);
+  // hide a routine item for this period only — the row stays, so it can't be
+  // resurrected by regeneration, and it returns fresh next period
+  async function skipToday(item: ChecklistItem) {
+    await supabase
+      .from("checklist_items")
+      .update({ skipped: true })
+      .eq("id", item.id);
     load();
   }
 
-  async function add(listType: ListType, text: string, scopeKey: string) {
+  // one-off item: delete it. Routine item: delete its TEMPLATE, which
+  // cascades away its instances — gone from every day going forward.
+  async function removeForever(item: ChecklistItem) {
+    if (item.template_id) {
+      await supabase
+        .from("checklist_templates")
+        .delete()
+        .eq("id", item.template_id);
+    } else {
+      await supabase.from("checklist_items").delete().eq("id", item.id);
+    }
+    load();
+  }
+
+  async function add(
+    listType: ListType,
+    text: string,
+    scopeKey: string,
+    routine: boolean
+  ) {
     const t = text.trim();
     if (!t) return;
-    await supabase.from("checklist_items").insert({
-      family_id: family.id,
-      list_type: listType,
-      scope_key: scopeKey,
-      item_text: t,
-      sort_order: 100,
-    });
+    if (routine) {
+      // add to the routine: create a template, then materialise today's copy
+      const { data: tpl } = await supabase
+        .from("checklist_templates")
+        .insert({ family_id: family.id, list_type: listType, item_text: t, sort_order: 50 })
+        .select()
+        .single();
+      if (tpl) {
+        await supabase.from("checklist_items").insert({
+          family_id: family.id,
+          list_type: listType,
+          scope_key: scopeKey,
+          template_id: tpl.id,
+          item_text: t,
+          sort_order: 50,
+        });
+      }
+    } else {
+      await supabase.from("checklist_items").insert({
+        family_id: family.id,
+        list_type: listType,
+        scope_key: scopeKey,
+        item_text: t,
+        sort_order: 100,
+      });
+    }
     load();
   }
 
@@ -86,58 +132,92 @@ export default function ListsTab() {
           Today <span className="muted">· {fmtDate(dayKey)}</span>
         </h2>
         <ProgressBar items={daily} />
-        <TickList items={daily} canEdit={isParent} onToggle={toggle} onDelete={remove} />
+        <TickList
+          items={daily}
+          canEdit={isParent}
+          onToggle={toggle}
+          onSkipToday={skipToday}
+          onRemoveForever={removeForever}
+        />
         {isParent && (
           <form
-            className="row"
             style={{ marginTop: 10 }}
             onSubmit={(e) => {
               e.preventDefault();
-              add("daily", newDaily, dayKey);
+              add("daily", newDaily, dayKey, dailyRoutine);
               setNewDaily("");
+              setDailyRoutine(false);
             }}
           >
-            <input
-              type="text"
-              value={newDaily}
-              onChange={(e) => setNewDaily(e.target.value)}
-              placeholder="Add something for today…"
-              aria-label="New daily item"
-            />
-            <button className="ghost" style={{ flex: "0 0 auto" }} type="submit">
-              Add
-            </button>
+            <div className="row">
+              <input
+                type="text"
+                value={newDaily}
+                onChange={(e) => setNewDaily(e.target.value)}
+                placeholder="Add something for today…"
+                aria-label="New daily item"
+              />
+              <button className="ghost" style={{ flex: "0 0 auto" }} type="submit">
+                Add
+              </button>
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, cursor: "pointer", fontWeight: 600 }}>
+              <input
+                type="checkbox"
+                checked={dailyRoutine}
+                onChange={(e) => setDailyRoutine(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: "var(--sage)" }}
+              />
+              <span className="muted">add to the daily routine (appears every day)</span>
+            </label>
           </form>
         )}
         <p className="muted" style={{ marginTop: 8 }}>
-          Resets fresh each morning.
+          Resets fresh each morning. ✕ on a routine item asks: just today, or every day.
         </p>
       </div>
 
       <div className="card">
         <h2>This week</h2>
         <ProgressBar items={weekly} />
-        <TickList items={weekly} canEdit={isParent} onToggle={toggle} onDelete={remove} />
+        <TickList
+          items={weekly}
+          canEdit={isParent}
+          onToggle={toggle}
+          onSkipToday={skipToday}
+          onRemoveForever={removeForever}
+        />
         {isParent && (
           <form
-            className="row"
             style={{ marginTop: 10 }}
             onSubmit={(e) => {
               e.preventDefault();
-              add("weekly", newWeekly, weekKey);
+              add("weekly", newWeekly, weekKey, weeklyRoutine);
               setNewWeekly("");
+              setWeeklyRoutine(false);
             }}
           >
-            <input
-              type="text"
-              value={newWeekly}
-              onChange={(e) => setNewWeekly(e.target.value)}
-              placeholder="Add something for this week…"
-              aria-label="New weekly item"
-            />
-            <button className="ghost" style={{ flex: "0 0 auto" }} type="submit">
-              Add
-            </button>
+            <div className="row">
+              <input
+                type="text"
+                value={newWeekly}
+                onChange={(e) => setNewWeekly(e.target.value)}
+                placeholder="Add something for this week…"
+                aria-label="New weekly item"
+              />
+              <button className="ghost" style={{ flex: "0 0 auto" }} type="submit">
+                Add
+              </button>
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, cursor: "pointer", fontWeight: 600 }}>
+              <input
+                type="checkbox"
+                checked={weeklyRoutine}
+                onChange={(e) => setWeeklyRoutine(e.target.checked)}
+                style={{ width: 16, height: 16, accentColor: "var(--sage)" }}
+              />
+              <span className="muted">add to the weekly routine (appears every week)</span>
+            </label>
           </form>
         )}
       </div>

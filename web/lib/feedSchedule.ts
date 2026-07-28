@@ -39,8 +39,9 @@ export interface ScheduleEntry {
   logged: boolean;
   ml?: number | null;
   // feeds: 'Mum'/'Dad' = the awake parent; 'unit' = both asleep, ward covers.
-  // pumping: 'clash' = lands inside Mum's protected sleep.
-  assigned: "Mum" | "Dad" | "unit" | "clash" | null;
+  // pumping: 'pre-sleep'/'post-sleep' = session moved to bracket Mum's
+  // protected sleep instead of landing inside it.
+  assigned: "Mum" | "Dad" | "unit" | "pre-sleep" | "post-sleep" | null;
   duringVisit: string | null; // booker name or 'free slot'
 }
 
@@ -95,16 +96,11 @@ function intervalAt(minOfDay: number, s: FeedSettingsRow): number {
 
 function assignFor(
   minOfDay: number,
-  windows: SleepWindowRow[],
-  pumping: boolean
-): "Mum" | "Dad" | "unit" | "clash" | null {
+  windows: SleepWindowRow[]
+): "Mum" | "Dad" | "unit" | null {
   const mumAsleep = windows.some(
     (w) => w.person === "mum" && inWindow(minOfDay, w.start_time, w.end_time)
   );
-  if (pumping) {
-    // only Mum pumps — flag anything that lands in her protected sleep
-    return mumAsleep ? "clash" : null;
-  }
   const dadAsleep = windows.some(
     (w) => w.person === "dad" && inWindow(minOfDay, w.start_time, w.end_time)
   );
@@ -112,6 +108,58 @@ function assignFor(
   if (mumAsleep) return "Dad";
   if (dadAsleep) return "Mum";
   return null;
+}
+
+/** Concrete Date bounds of a daily (possibly midnight-wrapping) window that
+ *  contains `cand`, or null if `cand` is outside it. */
+function windowBoundsAround(
+  cand: Date,
+  w: SleepWindowRow
+): { start: Date; end: Date } | null {
+  const s = toMin(w.start_time);
+  const e = toMin(w.end_time);
+  const candMin = cand.getHours() * 60 + cand.getMinutes();
+  const mk = (dayOffset: number, minutes: number) => {
+    const d = new Date(cand);
+    d.setDate(d.getDate() + dayOffset);
+    d.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+    return d;
+  };
+  if (s <= e) {
+    if (candMin >= s && candMin < e) return { start: mk(0, s), end: mk(0, e) };
+  } else {
+    if (candMin >= s) return { start: mk(0, s), end: mk(1, e) };
+    if (candMin < e) return { start: mk(-1, s), end: mk(0, e) };
+  }
+  return null;
+}
+
+const MIN_PUMP_GAP_MS = 45 * 60000;
+
+/** Next pump after `from`: interval-stepped, but a session that would land in
+ *  Mum's sleep brackets it — moved to just before the window (if there's a
+ *  sensible gap since the last pump) or to waking time. */
+function nextPump(
+  from: Date,
+  settings: FeedSettingsRow,
+  windows: SleepWindowRow[]
+): { at: Date; tag: "pre-sleep" | "post-sleep" | null } {
+  const minOfDay = from.getHours() * 60 + from.getMinutes();
+  const gapMs = intervalAt(minOfDay, settings) * 60000;
+  const cand = new Date(+from + gapMs);
+  for (const w of windows.filter((x) => x.person === "mum")) {
+    const b = windowBoundsAround(cand, w);
+    if (!b) continue;
+    // pull the session forward to just before sleep only if a decent share of
+    // the gap has passed — otherwise it waits until waking (no double-pumping
+    // an hour apart around a sleep cycle)
+    const preSleepOk =
+      +b.start > +from &&
+      +b.start - +from >= Math.max(MIN_PUMP_GAP_MS, gapMs * 0.5);
+    if (preSleepOk) return { at: b.start, tag: "pre-sleep" };
+    return { at: b.end, tag: "post-sleep" };
+  }
+  return { at: cand, tag: null };
 }
 
 function visitFor(at: Date, slots: SlotRow[]): string | null {
@@ -173,29 +221,44 @@ export function computeSchedule(
   const [eh, em] = settings.day_from.split(":").map(Number);
   endOfDay.setHours(eh, em, 0, 0);
 
+  // planned first session when nothing's logged yet and the day hasn't started
+  if (!sorted.length && anchor > now) {
+    const aMin = anchor.getHours() * 60 + anchor.getMinutes();
+    entries.push({
+      at: new Date(anchor),
+      logged: false,
+      assigned: pumping ? null : assignFor(aMin, windows),
+      duringVisit: visitFor(anchor, slots),
+    });
+  }
+
   let t = new Date(anchor);
   let guard = 0;
-  while (guard++ < 24) {
-    const minOfDay = t.getHours() * 60 + t.getMinutes();
-    t = new Date(+t + intervalAt(minOfDay, settings) * 60000);
-    if (t >= endOfDay) break;
-    // if we had no feeds yet and the planned first feed is still ahead, include it
-    if (!sorted.length && entries.length === 0 && anchor > now) {
-      const aMin = anchor.getHours() * 60 + anchor.getMinutes();
+  while (guard++ < 30) {
+    if (pumping) {
+      // smarter stepping: sessions bracket Mum's sleep instead of landing in it
+      const { at, tag } = nextPump(t, settings, windows);
+      if (+at <= +t) break; // safety against zero-progress
+      if (at >= endOfDay) break;
       entries.push({
-        at: new Date(anchor),
+        at: new Date(at),
         logged: false,
-        assigned: assignFor(aMin, windows, pumping),
-        duringVisit: visitFor(anchor, slots),
+        assigned: tag,
+        duringVisit: visitFor(at, slots),
+      });
+      t = at;
+    } else {
+      const minOfDay = t.getHours() * 60 + t.getMinutes();
+      t = new Date(+t + intervalAt(minOfDay, settings) * 60000);
+      if (t >= endOfDay) break;
+      const mm = t.getHours() * 60 + t.getMinutes();
+      entries.push({
+        at: new Date(t),
+        logged: false,
+        assigned: assignFor(mm, windows),
+        duringVisit: visitFor(t, slots),
       });
     }
-    const mm = t.getHours() * 60 + t.getMinutes();
-    entries.push({
-      at: new Date(t),
-      logged: false,
-      assigned: assignFor(mm, windows, pumping),
-      duringVisit: visitFor(t, slots),
-    });
   }
   return entries;
 }

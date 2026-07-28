@@ -106,7 +106,12 @@ export async function GET(
     .filter((s) => !s.logged)
     .forEach((s, i) => {
       const end = new Date(+s.at + 30 * 60000);
-      const note = s.assigned === "clash" ? " (clashes with sleep)" : "";
+      const note =
+        s.assigned === "pre-sleep"
+          ? " (before sleep)"
+          : s.assigned === "post-sleep"
+            ? " (on waking)"
+            : "";
       events.push(vevent(`pump-${i}-${dt(s.at)}@nicu`, dt(s.at), dt(end), `🥛 Pump${note}`));
     });
 

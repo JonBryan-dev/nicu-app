@@ -241,6 +241,16 @@ export default function FeedsTab() {
     await supabase
       .from("feed_settings")
       .upsert({ family_id: family.id, ...merged, updated_at: new Date().toISOString() });
+    // keep a history of plan changes (ml creeping up as she grows, etc.)
+    await supabase.from("feed_plan_history").insert({
+      family_id: family.id,
+      changed_by: profile.id,
+      baby_interval_min: merged.baby_interval_min ?? null,
+      baby_ml: merged.baby_ml ?? null,
+      feeds_per_day: merged.feeds_per_day ?? null,
+      interval_night_min: merged.interval_night_min ?? null,
+      target_ml: merged.target_ml ?? null,
+    });
   }
 
   async function addWindow(person: "mum" | "dad", start_time: string, end_time: string) {
@@ -265,27 +275,34 @@ export default function FeedsTab() {
       {/* baby's ward-set feeds */}
       <div className="card">
         <h2>{family.baby_name}&apos;s feeds <span className="muted">· set by the unit</span></h2>
-        {babyTimes.length === 0 ? (
+        {!settings.baby_interval_min ? (
           <p className="note">
-            Add the unit&apos;s plan under <b>Edit the plan</b> below (first feed, how often, ml) and her day appears here.
+            Add the unit&apos;s plan under <b>Edit the plan</b> below (how often + ml) and her day appears here.
           </p>
         ) : (
           <>
             <p className="muted" style={{ marginBottom: 6 }}>
-              {babyTimes.length} feeds · {settings.baby_ml ?? "?"} ml each · {babyNeedsPerDay ? `${babyNeedsPerDay} ml/day` : ""}
+              every {Math.round((settings.baby_interval_min / 60) * 10) / 10}h · {settings.baby_ml ?? "?"} ml each ·{" "}
+              {babyFeedsPerDay(settings)} feeds ≈ {babyNeedsPerDay || "?"} ml/day
             </p>
-            {babyTimes.map((t) => (
-              <div key={t.time} className="feedrow">
-                <span className="t">🍼 {t.time}</span>
-                <span className="info">
-                  {t.duringVisit
-                    ? t.duringVisit === "free slot"
-                      ? "during an open slot"
-                      : `during ${t.duringVisit}'s visit`
-                    : ""}
-                </span>
-              </div>
-            ))}
+            {babyTimes.length === 0 ? (
+              <p className="muted">
+                Times roll with the ward&apos;s day — set a first-feed time in the plan if you want them listed here.
+              </p>
+            ) : (
+              babyTimes.map((t) => (
+                <div key={t.time} className="feedrow">
+                  <span className="t">🍼 {t.time}</span>
+                  <span className="info">
+                    {t.duringVisit
+                      ? t.duringVisit === "free slot"
+                        ? "during an open slot"
+                        : `during ${t.duringVisit}'s visit`
+                      : ""}
+                  </span>
+                </div>
+              ))
+            )}
           </>
         )}
       </div>
@@ -387,9 +404,11 @@ export default function FeedsTab() {
                             s.ml != null ? `${s.ml} ml` : "logged",
                           ].filter(Boolean).join(" · ")
                         : [
-                            s.assigned === "clash"
-                              ? "⚠ lands in Mum's protected sleep"
-                              : null,
+                            s.assigned === "pre-sleep"
+                              ? "last one before Mum's sleep 😴"
+                              : s.assigned === "post-sleep"
+                                ? "first one after waking ☀️"
+                                : null,
                             s.duringVisit ? (s.duringVisit === "free slot" ? "during an open slot" : `during ${s.duringVisit}'s visit`) : null,
                           ].filter(Boolean).join(" · ") || "planned"}
                     </span>
@@ -442,7 +461,7 @@ export default function FeedsTab() {
             <h3>{family.baby_name.split(" ")[0]}&apos;s feeds (unit&apos;s plan)</h3>
             <div className="row wrap">
               <div>
-                <label>First feed</label>
+                <label>First feed (optional)</label>
                 <input type="time" value={settings.baby_first_feed?.slice(0, 5) ?? ""} onChange={(e) => saveSettings({ baby_first_feed: e.target.value || null })} />
               </div>
               <div>

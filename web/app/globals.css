@@ -628,6 +628,17 @@ select {
   flex: 0 0 auto;
   min-width: 0;
 }
+.removepick {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  white-space: nowrap;
+}
+.removepick .tiny {
+  border: 1px solid var(--mist);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
 .sleeprow {
   display: flex;
   align-items: center;
