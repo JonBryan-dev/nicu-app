@@ -48,6 +48,7 @@ export default function RestTab() {
   }, [supabase, family.id, weekKey]);
 
   const loadItems = useCallback(async () => {
+    if (!isParent) return; // wellbeing & respite are mum & dad's private space
     const { data } = await supabase
       .from("checklist_items")
       .select("*")
@@ -60,14 +61,16 @@ export default function RestTab() {
     setWbMum(items.filter((i) => i.list_type === "wellbeing_mum" && i.scope_key === dayKey));
     setWbDad(items.filter((i) => i.list_type === "wellbeing_dad" && i.scope_key === dayKey));
     setRespite(items.filter((i) => i.list_type === "respite" && i.scope_key === weekKey));
-  }, [supabase, family.id, dayKey, weekKey]);
+  }, [supabase, family.id, isParent, dayKey, weekKey]);
 
   useEffect(() => {
     (async () => {
-      await ensurePeriodItems(supabase, family.id, isParent, "wellbeing_mum", dayKey);
-      await ensurePeriodItems(supabase, family.id, isParent, "wellbeing_dad", dayKey);
-      await ensurePeriodItems(supabase, family.id, isParent, "respite", weekKey);
-      loadItems();
+      if (isParent) {
+        await ensurePeriodItems(supabase, family.id, isParent, "wellbeing_mum", dayKey);
+        await ensurePeriodItems(supabase, family.id, isParent, "wellbeing_dad", dayKey);
+        await ensurePeriodItems(supabase, family.id, isParent, "respite", weekKey);
+        loadItems();
+      }
       loadShifts();
     })();
   }, [supabase, family.id, isParent, dayKey, weekKey, loadItems, loadShifts]);
@@ -169,24 +172,28 @@ export default function RestTab() {
         </div>
       </div>
 
-      <div className="card">
-        <h2>Wellbeing today</h2>
-        <ProgressBar items={wbAll} />
-        <h3>Mum</h3>
-        <TickList items={wbMum} canEdit={isParent} onToggle={toggle} />
-        <h3>Dad</h3>
-        <TickList items={wbDad} canEdit={isParent} onToggle={toggle} />
-      </div>
+      {isParent && (
+        <>
+          <div className="card">
+            <h2>Wellbeing today</h2>
+            <ProgressBar items={wbAll} />
+            <h3>Mum</h3>
+            <TickList items={wbMum} canEdit={isParent} onToggle={toggle} />
+            <h3>Dad</h3>
+            <TickList items={wbDad} canEdit={isParent} onToggle={toggle} />
+          </div>
 
-      <div className="card">
-        <h2>Respite this week</h2>
-        <p className="note">
-          Aim to tick at least three. The guilt of leaving is normal — go
-          anyway.
-        </p>
-        <ProgressBar items={respite} />
-        <TickList items={respite} canEdit={isParent} onToggle={toggle} />
-      </div>
+          <div className="card">
+            <h2>Respite this week</h2>
+            <p className="note">
+              Aim to tick at least three. The guilt of leaving is normal — go
+              anyway.
+            </p>
+            <ProgressBar items={respite} />
+            <TickList items={respite} canEdit={isParent} onToggle={toggle} />
+          </div>
+        </>
+      )}
     </section>
   );
 }
