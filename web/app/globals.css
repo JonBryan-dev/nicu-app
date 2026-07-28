@@ -853,6 +853,12 @@ select {
     padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
     gap: 2px;
     box-shadow: 0 -2px 12px rgba(46, 42, 51, 0.06);
+    /* own compositor layer: stops the bar lagging behind iOS scroll */
+    transform: translateZ(0);
+  }
+  /* keyboard open: hide the bar so iOS can't float it mid-screen */
+  body.kb-open .tabs {
+    display: none;
   }
   .tabs a {
     border: none;

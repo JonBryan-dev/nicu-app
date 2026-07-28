@@ -62,6 +62,30 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [showTheme, setShowTheme] = useState(false);
   const [members, setMembers] = useState<(Profile & { created_at?: string })[]>([]);
 
+  // iOS: while the keyboard is up, Safari detaches fixed elements from the
+  // visual viewport — hide the bottom bar during typing so it can't float
+  // mid-screen (and typing gets the room back)
+  useEffect(() => {
+    const isField = (el: Element | null) =>
+      !!el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+    const onFocus = (e: FocusEvent) => {
+      if (isField(e.target as Element)) document.body.classList.add("kb-open");
+    };
+    const onBlur = () => {
+      setTimeout(() => {
+        if (!isField(document.activeElement)) {
+          document.body.classList.remove("kb-open");
+        }
+      }, 60);
+    };
+    window.addEventListener("focusin", onFocus);
+    window.addEventListener("focusout", onBlur);
+    return () => {
+      window.removeEventListener("focusin", onFocus);
+      window.removeEventListener("focusout", onBlur);
+    };
+  }, []);
+
   useEffect(() => {
     if (!showCodes || !isParent) return;
     supabase
