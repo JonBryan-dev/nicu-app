@@ -148,6 +148,10 @@ export default function LoginPage() {
               <button type="button" className="tiny" onClick={sendResetCode} disabled={busy}>
                 Forgotten your password?
               </button>
+              <br />
+              <a className="tiny" href="/join" style={{ color: "var(--ink-soft)", fontWeight: 600, textDecoration: "none" }}>
+                Have an invite code? Join here
+              </a>
             </div>
             {err && <p className="err">{err}</p>}
           </form>

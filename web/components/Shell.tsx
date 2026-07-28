@@ -8,6 +8,40 @@ import { dayNumber, fmtDate } from "@/lib/dates";
 import PushPrompt from "@/components/PushPrompt";
 import ThemePicker from "@/components/ThemePicker";
 
+function InviteShare({ code, baby }: { code?: string; baby: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!code) return null;
+  const link =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/join?code=${code}`
+      : "";
+  const msg = `You're invited to ${baby}'s private space 💛 Tap to join: ${link}`;
+  return (
+    <div className="row" style={{ margin: "6px 0 12px" }}>
+      <button
+        type="button"
+        className="ghost"
+        onClick={() => {
+          navigator.clipboard?.writeText(link);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+      >
+        {copied ? "Copied ✓" : "Copy link"}
+      </button>
+      <button
+        type="button"
+        className="ghost"
+        onClick={() =>
+          window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank")
+        }
+      >
+        WhatsApp
+      </button>
+    </div>
+  );
+}
+
 const TABS = [
   { href: "/", label: "Updates", icon: "✦" },
   { href: "/feeds", label: "Feeds", icon: "🍼", parentOnly: true },
@@ -115,18 +149,22 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
       {showCodes && isParent && (
         <div className="card">
-          <h2>Invite codes</h2>
+          <h2>Invite people</h2>
           <p className="note">
-            Parent code gives full access — family code is for everyone else.
+            Share a link — they tap it, add their name, email and a password,
+            and they&apos;re in. The link decides what they can do.
           </p>
-          <label>Parent code</label>
-          <div className="code-box">{family.parent_code}</div>
-          <label>Family &amp; friends code</label>
+          <label>Family &amp; friends</label>
           <div className="code-box">{family.family_code}</div>
+          <InviteShare code={family.family_code} baby={family.baby_name} />
+          <label>Other parent — full access</label>
+          <div className="code-box">{family.parent_code}</div>
+          <InviteShare code={family.parent_code} baby={family.baby_name} />
           {family.team_code && (
             <>
-              <label>NICU team code — updates &amp; photos only</label>
+              <label>NICU team — updates &amp; photos only</label>
               <div className="code-box">{family.team_code}</div>
+              <InviteShare code={family.team_code} baby={family.baby_name} />
             </>
           )}
         </div>
