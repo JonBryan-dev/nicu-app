@@ -105,7 +105,12 @@ export async function GET(
     .filter((s) => !s.logged)
     .forEach((s, i) => {
       const end = new Date(+s.at + 30 * 60000);
-      const who = s.assigned ? ` — ${s.assigned}` : "";
+      const who =
+        s.assigned === "unit"
+          ? " — unit (both asleep)"
+          : s.assigned
+            ? ` — ${s.assigned}`
+            : "";
       events.push(vevent(`feed-${i}-${dt(s.at)}@nicu`, dt(s.at), dt(end), `🍼 ${baby} feed${who}`));
     });
 

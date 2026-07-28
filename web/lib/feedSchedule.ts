@@ -6,13 +6,15 @@
 // booked visiting slot are flagged so the visitor can give them.
 
 export interface FeedSettingsRow {
-  interval_day_min: number;
-  interval_night_min: number | null;
+  interval_day_min: number; // legacy fixed day gap (fallback when feeds_per_day unset)
+  interval_night_min: number | null; // overnight gap ("longest stretch")
   day_from: string; // 'HH:MM[:SS]'
   night_from: string;
   target_ml: number | null;
+  feeds_per_day?: number | null; // when set, day gaps auto-computed
 }
 export interface SleepWindowRow {
+  id?: string;
   person: "mum" | "dad";
   start_time: string;
   end_time: string;
@@ -32,7 +34,8 @@ export interface ScheduleEntry {
   at: Date;
   logged: boolean;
   ml?: number | null;
-  assigned: "Mum" | "Dad" | null; // set when the other parent is asleep
+  // 'Mum'/'Dad' = the awake parent; 'unit' = both asleep, the ward covers it
+  assigned: "Mum" | "Dad" | "unit" | null;
   duringVisit: string | null; // booker name or 'free slot'
 }
 
@@ -54,25 +57,50 @@ export const DEFAULT_SETTINGS: FeedSettingsRow = {
   day_from: "08:00",
   night_from: "20:00",
   target_ml: null,
+  feeds_per_day: 8,
 };
 
+/**
+ * Day/night gaps. With feeds_per_day set, overnight feeds are spaced at the
+ * chosen night stretch and the REMAINING feeds are spread evenly across the
+ * day window — naturally producing a mix of 2/2½/3-hour gaps.
+ */
+export function computeGaps(s: FeedSettingsRow): {
+  dayGap: number;
+  nightGap: number;
+} {
+  const nightGap = s.interval_night_min ?? s.interval_day_min;
+  let dayGap = s.interval_day_min;
+  if (s.feeds_per_day) {
+    const dayStart = toMin(s.day_from);
+    const nightStart = toMin(s.night_from);
+    const daySpan = (nightStart - dayStart + 1440) % 1440 || 720;
+    const nightSpan = 1440 - daySpan;
+    const nightCount = Math.max(0, Math.floor(nightSpan / nightGap));
+    const dayCount = Math.max(1, s.feeds_per_day - nightCount);
+    dayGap = Math.max(60, Math.round(daySpan / dayCount / 5) * 5);
+  }
+  return { dayGap, nightGap };
+}
+
 function intervalAt(minOfDay: number, s: FeedSettingsRow): number {
-  const day = inWindow(minOfDay, s.day_from, s.night_from);
-  return day ? s.interval_day_min : s.interval_night_min ?? s.interval_day_min;
+  const { dayGap, nightGap } = computeGaps(s);
+  return inWindow(minOfDay, s.day_from, s.night_from) ? dayGap : nightGap;
 }
 
 function assignFor(
   minOfDay: number,
   windows: SleepWindowRow[]
-): "Mum" | "Dad" | null {
+): "Mum" | "Dad" | "unit" | null {
   const mumAsleep = windows.some(
     (w) => w.person === "mum" && inWindow(minOfDay, w.start_time, w.end_time)
   );
   const dadAsleep = windows.some(
     (w) => w.person === "dad" && inWindow(minOfDay, w.start_time, w.end_time)
   );
-  if (mumAsleep && !dadAsleep) return "Dad";
-  if (dadAsleep && !mumAsleep) return "Mum";
+  if (mumAsleep && dadAsleep) return "unit"; // both asleep — the ward covers it
+  if (mumAsleep) return "Dad";
+  if (dadAsleep) return "Mum";
   return null;
 }
 

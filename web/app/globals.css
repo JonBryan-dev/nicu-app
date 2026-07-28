@@ -616,6 +616,27 @@ select {
   font-size: 1.3rem;
   font-weight: 600;
 }
+/* narrow screens: let plan rows wrap instead of overlapping */
+.row.wrap {
+  flex-wrap: wrap;
+}
+.row.wrap > * {
+  flex: 1 1 45%;
+  min-width: 130px;
+}
+.row.wrap > button {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.sleeprow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--mist);
+  font-weight: 600;
+}
 .linkslots {
   display: flex;
   flex-wrap: wrap;
