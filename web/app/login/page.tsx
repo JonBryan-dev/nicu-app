@@ -52,6 +52,21 @@ export default function LoginPage() {
     else setSent(true);
   }
 
+  async function forgotPassword() {
+    if (!email.trim()) {
+      setErr("Pop your email in first.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+    });
+    setBusy(false);
+    if (error) setErr(error.message);
+    else setSent(true);
+  }
+
   return (
     <div className="overlay">
       <div className="card">
@@ -98,6 +113,15 @@ export default function LoginPage() {
                 disabled={busy}
               >
                 First time, or no password yet? Email me a sign-in link
+              </button>
+              <br />
+              <button
+                type="button"
+                className="tiny"
+                onClick={forgotPassword}
+                disabled={busy}
+              >
+                Forgotten your password?
               </button>
             </div>
             {err && <p className="err">{err}</p>}
