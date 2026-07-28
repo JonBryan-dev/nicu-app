@@ -628,6 +628,14 @@ select {
   flex: 0 0 auto;
   min-width: 0;
 }
+.coach {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--mist);
+}
+.coachline {
+  font-size: 0.95rem;
+}
 .removepick {
   display: inline-flex;
   gap: 2px;

@@ -17,7 +17,7 @@ import {
   type SleepWindowRow,
   type SlotRow,
 } from "@/lib/feedSchedule";
-import { todayKey } from "@/lib/dates";
+import { todayKey, dayNumber } from "@/lib/dates";
 
 type FeedRecord = {
   id: string;
@@ -62,6 +62,7 @@ export default function FeedsTab() {
   const [feeds, setFeeds] = useState<FeedRecord[]>([]);
   const [slots, setSlots] = useState<SlotRow[]>([]);
   const [exprToday, setExprToday] = useState(0);
+  const [historyTotals, setHistoryTotals] = useState<Record<string, number>>({});
   const [exprMl, setExprMl] = useState("");
   const [finishMl, setFinishMl] = useState("");
   const [finishMethod, setFinishMethod] = useState("pump");
@@ -81,27 +82,43 @@ export default function FeedsTab() {
 
   const load = useCallback(async () => {
     if (!isParent) return;
-    const dayStartIso = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+    const dayStart = new Date(new Date().setHours(0, 0, 0, 0));
+    const weekAgoIso = new Date(+dayStart - 7 * 864e5).toISOString();
+    const dayStartIso = dayStart.toISOString();
     const [st, sw, fd, sl, ex] = await Promise.all([
       supabase.from("feed_settings").select("*").eq("family_id", family.id).maybeSingle(),
       supabase.from("sleep_windows").select("*").eq("family_id", family.id).order("start_time"),
-      supabase.from("feeds").select("*").eq("family_id", family.id).gte("started_at", dayStartIso).order("started_at"),
+      supabase.from("feeds").select("*").eq("family_id", family.id).gte("started_at", weekAgoIso).order("started_at"),
       supabase
         .from("visit_slots")
         .select("slot_date, start_time, end_time, booker:profiles!visit_slots_booked_by_fkey(display_name)")
         .eq("family_id", family.id)
         .eq("slot_date", dayKey),
-      supabase.from("expressing_logs").select("ml").eq("family_id", family.id).gte("at", dayStartIso),
+      supabase.from("expressing_logs").select("ml, at").eq("family_id", family.id).gte("at", weekAgoIso),
     ]);
     if (st.data) setSettings({ ...DEFAULT_SETTINGS, ...st.data });
     setWindows((sw.data as SleepWindowRow[]) ?? []);
-    setFeeds((fd.data as FeedRecord[]) ?? []);
+    const allFeeds = (fd.data as FeedRecord[]) ?? [];
+    setFeeds(allFeeds.filter((f) => f.started_at >= dayStartIso));
+    // daily expressed totals for the last 7 full days (coach input)
+    const totals: Record<string, number> = {};
+    const dayOf = (iso: string) => {
+      const d = new Date(iso);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    };
+    for (const f of allFeeds) if (f.ml) totals[dayOf(f.started_at)] = (totals[dayOf(f.started_at)] ?? 0) + f.ml;
+    for (const r of ((ex.data as { ml: number; at: string }[]) ?? []))
+      totals[dayOf(r.at)] = (totals[dayOf(r.at)] ?? 0) + r.ml;
+    setHistoryTotals(totals);
     setSlots(
       ((sl.data as unknown as { slot_date: string; start_time: string; end_time: string; booker: { display_name: string } | null }[]) ?? []).map(
         (s) => ({ slot_date: s.slot_date, start_time: s.start_time, end_time: s.end_time, booker: s.booker?.display_name ?? null })
       )
     );
-    setExprToday(((ex.data as { ml: number }[]) ?? []).reduce((a, r) => a + r.ml, 0));
+    setExprToday(
+      (((ex.data as { ml: number; at: string }[]) ?? []).filter((r) => r.at >= dayStartIso))
+        .reduce((a, r) => a + r.ml, 0)
+    );
   }, [supabase, family.id, isParent, dayKey]);
 
   useEffect(() => {
@@ -130,6 +147,40 @@ export default function FeedsTab() {
   const pumpedToday = feeds.reduce((a, f) => a + (f.ml ?? 0), 0);
   const expressedToday = exprToday + pumpedToday;
   const babyNeedsPerDay = babyFeedsPerDay(settings) * (settings.baby_ml ?? 0);
+
+  // ---- supply coach: 7-day average vs baby's need vs the evidence curve ----
+  // Targets: coming-to-volume milestones (~350ml/d by day 6, 500 by day 8,
+  // 750 by day 14) and the CHOP consensus band of 750–1000 ml/day by day 14 —
+  // deliberately above a preemie's intake, because demand jumps later.
+  const coach = (() => {
+    const todayStr = dayKey;
+    const completeDays = Object.entries(historyTotals)
+      .filter(([d, ml]) => d !== todayStr && ml > 0)
+      .map(([, ml]) => ml);
+    const avg = completeDays.length
+      ? Math.round(completeDays.reduce((a, b) => a + b, 0) / completeDays.length)
+      : expressedToday || null;
+    if (avg == null) return null;
+    const dayN = dayNumber(family.baby_dob);
+    const curveTarget =
+      dayN <= 6 ? 350 : dayN <= 8 ? 500 : dayN <= 14 ? 500 + ((dayN - 8) / 6) * 250 : 750;
+    let status: string;
+    let advice: string;
+    if (avg < Math.min(curveTarget * 0.8, babyNeedsPerDay || Infinity)) {
+      status = "below the curve";
+      advice = `Day ${dayN} milestone is ~${Math.round(curveTarget)} ml/day. Worth asking the lactation team about extra or longer sessions (power pumping) — small changes now protect supply for when ${family.baby_name.split(" ")[0]}'s needs jump.`;
+    } else if (avg <= 1000) {
+      status = "on track";
+      advice =
+        babyNeedsPerDay && avg > babyNeedsPerDay
+          ? `~${avg - babyNeedsPerDay} ml/day beyond her current need is going to the stash — that's the plan working, not oversupply. Research targets 750–1000 ml/day by day 14 because her demand will rise.`
+          : `Right in the healthy band for day ${dayN}. Keep the rhythm going.`;
+    } else {
+      status = "above the band";
+      advice = `Sustained output over ~1000 ml/day is genuine oversupply territory. If it's causing engorgement or blocked ducts, agree a gradual wind-down with the team — never cut sessions abruptly (mastitis risk). If it's comfortable, the freezer stash is gold.`;
+    }
+    return { avg, dayN, curveTarget: Math.round(curveTarget), status, advice, days: completeDays.length };
+  })();
 
   if (!isParent) {
     return (
@@ -454,8 +505,25 @@ export default function FeedsTab() {
           <input type="text" inputMode="numeric" value={exprMl} onChange={(e) => setExprMl(e.target.value)} placeholder="Quick-log expressed ml…" aria-label="Expressed millilitres" />
           <button className="ghost" style={{ flex: "0 0 auto" }} type="submit">Add</button>
         </form>
+        {coach && (
+          <div className="coach">
+            <div className="coachline">
+              <span className="badge" style={{
+                background: coach.status === "on track" ? "var(--sage)" : coach.status === "below the curve" ? "var(--rose)" : "var(--sky)",
+                color: "#fff",
+              }}>
+                {coach.status}
+              </span>{" "}
+              <b>{coach.avg} ml/day</b>
+              <span className="muted">
+                {" "}avg{coach.days ? ` over ${coach.days} day${coach.days > 1 ? "s" : ""}` : " (today so far)"} · day-{coach.dayN} milestone ~{coach.curveTarget} ml
+              </span>
+            </div>
+            <p className="muted" style={{ marginTop: 6 }}>{coach.advice}</p>
+          </div>
+        )}
         <p className="muted" style={{ marginTop: 8 }}>
-          A steady surplus builds the freezer stash; what to change is always a chat with your unit.
+          Guidance here follows published NICU lactation targets — any change to your plan is still a decision with your unit.
         </p>
       </div>
 
