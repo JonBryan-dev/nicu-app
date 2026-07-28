@@ -111,6 +111,7 @@ export default function FeedsTab() {
   useRealtime(supabase, "expressing_logs", family.id, load);
   useRealtime(supabase, "visit_slots", family.id, load);
   useRealtime(supabase, "sleep_windows", family.id, load);
+  useRealtime(supabase, "feed_settings", family.id, load);
 
   const openFeed = feeds.find((f) => !f.ended_at);
   useEffect(() => {
@@ -236,21 +237,30 @@ export default function FeedsTab() {
   }
 
   async function saveSettings(next: Partial<FeedSettingsRow>) {
+    setErr("");
     const merged = { ...settings, ...next };
-    setSettings(merged);
-    await supabase
+    setSettings(merged); // optimistic — schedule recomputes immediately
+    const { error } = await supabase
       .from("feed_settings")
       .upsert({ family_id: family.id, ...merged, updated_at: new Date().toISOString() });
+    if (error) {
+      setErr("Plan didn't save: " + error.message);
+      load(); // resync with what the DB actually holds
+      return;
+    }
     // keep a history of plan changes (ml creeping up as she grows, etc.)
-    await supabase.from("feed_plan_history").insert({
-      family_id: family.id,
-      changed_by: profile.id,
-      baby_interval_min: merged.baby_interval_min ?? null,
-      baby_ml: merged.baby_ml ?? null,
-      feeds_per_day: merged.feeds_per_day ?? null,
-      interval_night_min: merged.interval_night_min ?? null,
-      target_ml: merged.target_ml ?? null,
-    });
+    await supabase
+      .from("feed_plan_history")
+      .insert({
+        family_id: family.id,
+        changed_by: profile.id,
+        baby_interval_min: merged.baby_interval_min ?? null,
+        baby_ml: merged.baby_ml ?? null,
+        feeds_per_day: merged.feeds_per_day ?? null,
+        interval_night_min: merged.interval_night_min ?? null,
+        target_ml: merged.target_ml ?? null,
+      })
+      .then(() => {}); // history is best-effort
   }
 
   async function addWindow(
@@ -260,14 +270,18 @@ export default function FeedsTab() {
     end_time: string
   ) {
     if (!start_time || !end_time) return;
-    await supabase
+    setErr("");
+    const { error } = await supabase
       .from("sleep_windows")
       .insert({ family_id: family.id, person, kind, start_time, end_time });
+    if (error) setErr("Window didn't save: " + error.message);
     load();
   }
 
   async function removeWindow(id: string) {
-    await supabase.from("sleep_windows").delete().eq("id", id);
+    setErr("");
+    const { error } = await supabase.from("sleep_windows").delete().eq("id", id);
+    if (error) setErr("Couldn't remove that window: " + error.message);
     load();
   }
 
@@ -527,6 +541,7 @@ export default function FeedsTab() {
               onAdd={(s, e) => addWindow("dad", "sleep", s, e)}
               onRemove={removeWindow}
             />
+            {err && <p className="err">{err}</p>}
             <button className="tiny" style={{ marginTop: 8 }} onClick={() => setShowPlan(false)}>Done</button>
           </>
         )}
