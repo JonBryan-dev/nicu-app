@@ -566,6 +566,63 @@ label {
   border-radius: 12px;
   background: var(--mist);
 }
+/* ---------- feeds tab ---------- */
+select {
+  width: 100%;
+  border: 1px solid var(--mist);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: 400 0.95rem var(--font-nunito), sans-serif;
+  color: var(--ink);
+  background: var(--linen);
+}
+.timer {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 2.4rem;
+  font-weight: 500;
+}
+.timer .muted {
+  font-family: var(--font-nunito), sans-serif;
+  font-size: 0.85rem;
+  margin-left: 8px;
+}
+.feedrow {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--mist);
+}
+.feedrow:last-child {
+  border-bottom: none;
+}
+.feedrow .t {
+  font-weight: 700;
+  min-width: 74px;
+}
+.feedrow.done .t {
+  color: var(--sage);
+}
+.feedrow .info {
+  color: var(--ink-soft);
+}
+.supply {
+  display: flex;
+  gap: 18px;
+  margin-top: 6px;
+}
+.supply .big {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+.linkslots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--mist);
+}
 .hide {
   display: none !important;
 }

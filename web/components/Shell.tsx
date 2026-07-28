@@ -9,6 +9,7 @@ import PushPrompt from "@/components/PushPrompt";
 
 const TABS = [
   { href: "/", label: "Updates" },
+  { href: "/feeds", label: "Feeds", parentOnly: true },
   { href: "/lists", label: "Lists", parentOnly: true },
   { href: "/support", label: "Support" },
   { href: "/visits", label: "Visits" },
@@ -59,13 +60,21 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <div className="code-box">{family.parent_code}</div>
           <label>Family &amp; friends code</label>
           <div className="code-box">{family.family_code}</div>
+          {family.team_code && (
+            <>
+              <label>NICU team code — updates &amp; photos only</label>
+              <div className="code-box">{family.team_code}</div>
+            </>
+          )}
         </div>
       )}
 
       <PushPrompt />
 
       <nav className="tabs" aria-label="Sections">
-        {TABS.filter((t) => isParent || !t.parentOnly).map((t) => (
+        {TABS.filter((t) =>
+          profile.role === "team" ? t.href === "/" : isParent || !t.parentOnly
+        ).map((t) => (
           <Link
             key={t.href}
             href={t.href}

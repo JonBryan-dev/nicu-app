@@ -23,11 +23,19 @@ export default async function AppLayout({
     .maybeSingle<Profile>();
   if (!profile) redirect("/onboarding");
 
-  const { data: family } = await supabase
-    .from("families")
-    .select("*")
-    .eq("id", profile.family_id)
-    .single<Family>();
+  let family: Family | null = null;
+  if (profile.role === "team") {
+    // team can't read the families row (it holds invite codes) — summary RPC
+    const { data } = await supabase.rpc("my_family_summary");
+    family = data as Family | null;
+  } else {
+    const { data } = await supabase
+      .from("families")
+      .select("*")
+      .eq("id", profile.family_id)
+      .single<Family>();
+    family = data;
+  }
   if (!family) redirect("/onboarding");
 
   return (

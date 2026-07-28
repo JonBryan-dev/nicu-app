@@ -18,9 +18,11 @@ export default function OnboardingPage() {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [codes, setCodes] = useState<{ parent: string; family: string } | null>(
-    null
-  );
+  const [codes, setCodes] = useState<{
+    parent: string;
+    family: string;
+    team?: string;
+  } | null>(null);
   const [pushOffer, setPushOffer] = useState(false);
 
   useEffect(() => {
@@ -49,7 +51,11 @@ export default function OnboardingPage() {
       setErr(error.message);
       return;
     }
-    setCodes({ parent: data.parent_code, family: data.family_code });
+    setCodes({
+      parent: data.parent_code,
+      family: data.family_code,
+      team: data.team_code ?? undefined,
+    });
   }
 
   async function joinFamily(e: React.FormEvent) {
@@ -101,6 +107,12 @@ export default function OnboardingPage() {
           <div className="code-box">{codes.parent}</div>
           <label>Family &amp; friends code</label>
           <div className="code-box">{codes.family}</div>
+          {codes.team && (
+            <>
+              <label>NICU team code — updates &amp; photos only</label>
+              <div className="code-box">{codes.team}</div>
+            </>
+          )}
           <PushExplainer onDone={offerPush} />
         </div>
       </div>

@@ -1,0 +1,149 @@
+// /api/calendar/[token] — private ICS subscription feed for the family.
+// Auth is the unguessable token (calendar apps can't log in); data comes from
+// the security-definer calendar_feed RPC using only the anon key.
+// Times are emitted as floating local times — the whole family is in the UK.
+import { createClient } from "@supabase/supabase-js";
+import {
+  computeSchedule,
+  DEFAULT_SETTINGS,
+  type FeedSettingsRow,
+  type SleepWindowRow,
+  type FeedRow,
+  type SlotRow,
+} from "@/lib/feedSchedule";
+
+export const dynamic = "force-dynamic";
+
+type FeedPayload = {
+  baby_name: string;
+  settings: FeedSettingsRow | null;
+  sleep_windows: SleepWindowRow[];
+  feeds_today: FeedRow[];
+  slots: SlotRow[];
+  tasks: {
+    task_text: string;
+    claimer: string | null;
+    slot: { slot_date: string; start_time: string; end_time: string } | null;
+  }[];
+};
+
+const esc = (s: string) =>
+  s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+
+function dt(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}00`;
+}
+function dtFrom(dateStr: string, timeStr: string): string {
+  return dateStr.replace(/-/g, "") + "T" + timeStr.slice(0, 5).replace(":", "") + "00";
+}
+
+function vevent(uid: string, start: string, end: string, summary: string): string {
+  return [
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTART:${start}`,
+    `DTEND:${end}`,
+    `SUMMARY:${esc(summary)}`,
+    "END:VEVENT",
+  ].join("\r\n");
+}
+
+export async function GET(
+  _req: Request,
+  { params }: { params: { token: string } }
+) {
+  if (!/^[0-9a-f-]{36}$/i.test(params.token)) {
+    return new Response("not found", { status: 404 });
+  }
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false } }
+  );
+  const { data, error } = await supabase.rpc("calendar_feed", {
+    p_token: params.token,
+  });
+  if (error || !data) return new Response("not found", { status: 404 });
+
+  const feed = data as FeedPayload;
+  const baby = feed.baby_name;
+  const settings = feed.settings ?? DEFAULT_SETTINGS;
+  const events: string[] = [];
+
+  // today's planned feeds (skip already-logged ones)
+  const schedule = computeSchedule(settings, feed.feeds_today, feed.sleep_windows, feed.slots);
+  schedule
+    .filter((s) => !s.logged)
+    .forEach((s, i) => {
+      const end = new Date(+s.at + 30 * 60000);
+      const who = s.assigned ? ` — ${s.assigned}` : "";
+      events.push(vevent(`feed-${i}-${dt(s.at)}@nicu`, dt(s.at), dt(end), `🍼 ${baby} feed${who}`));
+    });
+
+  // visiting slots (14 days)
+  for (const s of feed.slots) {
+    const label = s.booker ? `Visit — ${s.booker}` : "Visiting slot — free";
+    events.push(
+      vevent(
+        `slot-${s.slot_date}-${s.start_time}@nicu`,
+        dtFrom(s.slot_date, s.start_time),
+        dtFrom(s.slot_date, s.end_time),
+        `🏥 ${label} (${baby})`
+      )
+    );
+  }
+
+  // claimed hospital jobs with a linked slot
+  for (const t of feed.tasks) {
+    if (!t.slot) continue;
+    events.push(
+      vevent(
+        `task-${t.slot.slot_date}-${t.slot.start_time}@nicu`,
+        dtFrom(t.slot.slot_date, t.slot.start_time),
+        dtFrom(t.slot.slot_date, t.slot.end_time),
+        `💛 ${t.claimer ?? "Family"}: ${t.task_text}`
+      )
+    );
+  }
+
+  // protected sleep windows for the next 7 days
+  const today = new Date();
+  for (let d = 0; d < 7; d++) {
+    const day = new Date(today);
+    day.setDate(day.getDate() + d);
+    const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+    for (const w of feed.sleep_windows) {
+      const label = w.person === "mum" ? "Mum" : "Dad";
+      const wraps = w.end_time < w.start_time;
+      const endDay = new Date(day);
+      if (wraps) endDay.setDate(endDay.getDate() + 1);
+      const endStr = `${endDay.getFullYear()}-${String(endDay.getMonth() + 1).padStart(2, "0")}-${String(endDay.getDate()).padStart(2, "0")}`;
+      events.push(
+        vevent(
+          `sleep-${w.person}-${dateStr}@nicu`,
+          dtFrom(dateStr, w.start_time),
+          dtFrom(endStr, w.end_time),
+          `😴 ${label}'s protected sleep`
+        )
+      );
+    }
+  }
+
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//NICU Companion//EN",
+    `X-WR-CALNAME:${esc(baby + " — NICU")}`,
+    "X-PUBLISHED-TTL:PT15M",
+    ...events,
+    "END:VCALENDAR",
+  ].join("\r\n");
+
+  return new Response(ics, {
+    headers: {
+      "content-type": "text/calendar; charset=utf-8",
+      "cache-control": "private, max-age=300",
+    },
+  });
+}

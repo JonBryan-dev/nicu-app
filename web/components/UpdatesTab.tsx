@@ -13,6 +13,8 @@ type Mode = "free" | "guided";
 
 export default function UpdatesTab() {
   const { supabase, profile, family, isParent } = useFamily();
+  const isTeam = profile.role === "team";
+  const canPost = isParent || isTeam;
   const [updates, setUpdates] = useState<Update[] | null>(null);
   const [urls, setUrls] = useState<Record<string, string>>({});
 
@@ -141,7 +143,7 @@ export default function UpdatesTab() {
 
   return (
     <section>
-      {isParent && (
+      {canPost && (
         <form className="card" onSubmit={post}>
           <h2>Share an update</h2>
 
@@ -187,13 +189,17 @@ export default function UpdatesTab() {
           )}
 
           <div className="composer-row">
-            <button
-              type="button"
-              className="tiny"
-              onClick={() => setMode(mode === "free" ? "guided" : "free")}
-            >
-              {mode === "free" ? "Use guided prompts" : "Free write"}
-            </button>
+            {isParent ? (
+              <button
+                type="button"
+                className="tiny"
+                onClick={() => setMode(mode === "free" ? "guided" : "free")}
+              >
+                {mode === "free" ? "Use guided prompts" : "Free write"}
+              </button>
+            ) : (
+              <span />
+            )}
             <label className="milestone-toggle">
               <input
                 type="checkbox"
@@ -245,7 +251,7 @@ export default function UpdatesTab() {
         </form>
       )}
 
-      <GrowthCard />
+      {!isTeam && <GrowthCard />}
 
       <div className="thread">
         {updates === null ? null : updates.length === 0 ? (
@@ -275,7 +281,7 @@ export default function UpdatesTab() {
                   )}
                 </div>
               )}
-              {isParent && (
+              {(isParent || (isTeam && u.author_id === profile.id)) && (
                 <button className="tiny" onClick={() => remove(u)}>
                   remove
                 </button>
