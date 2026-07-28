@@ -21,6 +21,28 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [showCodes, setShowCodes] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [pw, setPw] = useState("");
+  const [pwMsg, setPwMsg] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+
+  async function setPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (pw.length < 8) {
+      setPwMsg("Use at least 8 characters.");
+      return;
+    }
+    setPwBusy(true);
+    setPwMsg("");
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setPwBusy(false);
+    if (error) {
+      setPwMsg(error.message);
+      return;
+    }
+    setPw("");
+    setPwMsg("Done — next time you can sign in with your email and password.");
+  }
 
   async function signOut() {
     await supabase.auth.signOut();
@@ -46,9 +68,45 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               ·{" "}
             </>
           )}
+          <button onClick={() => setShowPw((s) => !s)}>password</button> ·{" "}
           <button onClick={signOut}>sign out</button>
         </div>
       </div>
+
+      {showPw && (
+        <div className="card">
+          <h2>Set a password</h2>
+          <p className="note">
+            Once set, you can sign in with just your email and password — no
+            more email links.
+          </p>
+          <form onSubmit={setPassword}>
+            <div className="row">
+              <input
+                type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+                placeholder="New password (8+ characters)"
+                autoComplete="new-password"
+                aria-label="New password"
+              />
+              <button
+                className="primary"
+                style={{ flex: "0 0 auto" }}
+                type="submit"
+                disabled={pwBusy}
+              >
+                {pwBusy ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </form>
+          {pwMsg && (
+            <p className="muted" style={{ marginTop: 8 }}>
+              {pwMsg}
+            </p>
+          )}
+        </div>
+      )}
 
       {showCodes && isParent && (
         <div className="card">
