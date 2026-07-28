@@ -18,7 +18,13 @@ export const metadata: Metadata = {
   title: "Our NICU Journey",
   description: "A private space for our family during the NICU stay.",
   manifest: "/manifest.json",
-  icons: { apple: "/icon-192.png" },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192" },
+      { url: "/icon-512.png", sizes: "512x512" },
+    ],
+    apple: "/icon-192.png",
+  },
 };
 
 export const viewport: Viewport = {
