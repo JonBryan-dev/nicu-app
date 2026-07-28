@@ -81,8 +81,8 @@ export default function LoginPage() {
   async function verifyCode(e: React.FormEvent) {
     e.preventDefault();
     const token = code.replace(/\D/g, "");
-    if (token.length !== 6) {
-      setErr("The code is 6 digits.");
+    if (token.length < 6) {
+      setErr("That looks too short — copy the whole code from the email.");
       return;
     }
     setBusy(true);
@@ -156,7 +156,7 @@ export default function LoginPage() {
         {(mode === "code" || mode === "resetcode") && (
           <form onSubmit={verifyCode}>
             <p className="note" style={{ textAlign: "center" }}>
-              We&apos;ve emailed a 6-digit code to <b>{email.trim()}</b>.
+              We&apos;ve emailed a code to <b>{email.trim()}</b>.
               {mode === "resetcode" && " Enter it here, then choose a new password."}
             </p>
             <label htmlFor="otp">Your code</label>
@@ -165,11 +165,11 @@ export default function LoginPage() {
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
-              maxLength={6}
+              maxLength={10}
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder="123456"
-              style={{ textAlign: "center", letterSpacing: "0.4em", fontWeight: 700 }}
+              placeholder="12345678"
+              style={{ textAlign: "center", letterSpacing: "0.3em", fontWeight: 700 }}
               required
             />
             <div style={{ marginTop: 16, textAlign: "center" }}>
