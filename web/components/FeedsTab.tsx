@@ -175,9 +175,17 @@ export default function FeedsTab() {
         babyNeedsPerDay && avg > babyNeedsPerDay
           ? `~${avg - babyNeedsPerDay} ml/day beyond her current need is going to the stash — that's the plan working, not oversupply. Research targets 750–1000 ml/day by day 14 because her demand will rise.`
           : `Right in the healthy band for day ${dayN}. Keep the rhythm going.`;
+    } else if (dayN <= 14) {
+      // building phase: never suggest reducing before the day-14 target is set
+      status = "strong supply";
+      advice = `Brilliant output for day ${dayN} — and this is NOT the time to reduce anything. The first fortnight sets your long-term ceiling; keep every session, pump to comfort, and bank the stash.`;
+    } else if (dayN <= 42) {
+      // calibration phase (~6 weeks): protect supply, manage comfort only
+      status = "above the band";
+      advice = `Output is above the 750–1000 band. Supply is still calibrating until around 6 weeks, so hold the session count — if engorgement or blocked ducts are a problem, ask the team about pumping to comfort rather than dropping sessions.`;
     } else {
       status = "above the band";
-      advice = `Sustained output over ~1000 ml/day is genuine oversupply territory. If it's causing engorgement or blocked ducts, agree a gradual wind-down with the team — never cut sessions abruptly (mastitis risk). If it's comfortable, the freezer stash is gold.`;
+      advice = `Sustained output over ~1000 ml/day with supply now established. If it's causing engorgement or blocked ducts, agree a gradual wind-down with the team — never cut sessions abruptly (mastitis risk). If it's comfortable, the freezer stash is gold.`;
     }
     return { avg, dayN, curveTarget: Math.round(curveTarget), status, advice, days: completeDays.length };
   })();
