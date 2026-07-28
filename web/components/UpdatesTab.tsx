@@ -82,7 +82,7 @@ export default function UpdatesTab() {
     }
     setComments(byUpdate);
     const rByUpdate: Record<string, ReactionRow[]> = {};
-    for (const row of (r.data as ReactionRow[]) ?? []) {
+    for (const row of (r.data as unknown as ReactionRow[]) ?? []) {
       (rByUpdate[row.update_id] ??= []).push(row);
     }
     setReactions(rByUpdate);
