@@ -19,6 +19,7 @@ export default function ListsTab() {
   const [newWeekly, setNewWeekly] = useState("");
 
   const load = useCallback(async () => {
+    if (!isParent) return; // Lists is mum & dad's private space
     const { data } = await supabase
       .from("checklist_items")
       .select("*")
@@ -30,7 +31,7 @@ export default function ListsTab() {
     const items = (data as ChecklistItem[]) ?? [];
     setDaily(items.filter((i) => i.list_type === "daily" && i.scope_key === dayKey));
     setWeekly(items.filter((i) => i.list_type === "weekly" && i.scope_key === weekKey));
-  }, [supabase, family.id, dayKey, weekKey]);
+  }, [supabase, family.id, isParent, dayKey, weekKey]);
 
   useEffect(() => {
     (async () => {
@@ -66,6 +67,16 @@ export default function ListsTab() {
       sort_order: 100,
     });
     load();
+  }
+
+  if (!isParent) {
+    return (
+      <section>
+        <div className="card">
+          <div className="empty">This one&apos;s just for mum &amp; dad.</div>
+        </div>
+      </section>
+    );
   }
 
   return (

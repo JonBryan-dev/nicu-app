@@ -9,7 +9,7 @@ import PushPrompt from "@/components/PushPrompt";
 
 const TABS = [
   { href: "/", label: "Updates" },
-  { href: "/lists", label: "Lists" },
+  { href: "/lists", label: "Lists", parentOnly: true },
   { href: "/support", label: "Support" },
   { href: "/visits", label: "Visits" },
   { href: "/rest", label: "Rest" },
@@ -65,7 +65,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       <PushPrompt />
 
       <nav className="tabs" aria-label="Sections">
-        {TABS.map((t) => (
+        {TABS.filter((t) => isParent || !t.parentOnly).map((t) => (
           <Link
             key={t.href}
             href={t.href}
