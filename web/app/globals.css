@@ -612,6 +612,65 @@ label {
   border-radius: 12px;
   background: var(--mist);
 }
+.photos video {
+  width: 100%;
+  max-height: 340px;
+  border-radius: 12px;
+  border: 1px solid var(--mist);
+  background: #000;
+}
+.thumb .vid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--mist);
+  background: var(--mist);
+  font-size: 1.4rem;
+}
+/* reactions + comments */
+.reactbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.reactbar > button:not(.tiny) {
+  border: 1px solid var(--mist);
+  background: var(--linen);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.reactbar > button.on {
+  border-color: var(--rose-deep);
+  background: var(--card);
+}
+.reactbar .rcount {
+  font: 700 0.72rem var(--font-nunito), sans-serif;
+  color: var(--ink-soft);
+  margin-left: 4px;
+}
+.comment {
+  font-size: 0.85rem;
+  padding: 7px 0 3px;
+  border-top: 1px solid var(--mist);
+  margin-top: 7px;
+}
+.comment .tiny {
+  padding: 0 4px;
+}
+.commentform {
+  margin-top: 8px;
+}
+.commentform input {
+  padding: 8px 12px;
+  font-size: 1rem;
+}
 /* ---------- feeds tab ---------- */
 select {
   width: 100%;

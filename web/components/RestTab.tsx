@@ -25,13 +25,11 @@ const STATE_LABEL: Record<ShiftAssignee, string> = {
 };
 
 export default function RestTab() {
-  const { supabase, family, isParent } = useFamily();
+  const { supabase, profile, family, isParent } = useFamily();
   const dayKey = todayKey();
   const weekKey = isoWeekKey(dayKey);
 
   const [shifts, setShifts] = useState<Record<string, ShiftAssignee>>({});
-  const [wbMum, setWbMum] = useState<ChecklistItem[]>([]);
-  const [wbDad, setWbDad] = useState<ChecklistItem[]>([]);
   const [respite, setRespite] = useState<ChecklistItem[]>([]);
 
   const loadShifts = useCallback(async () => {
@@ -48,26 +46,21 @@ export default function RestTab() {
   }, [supabase, family.id, weekKey]);
 
   const loadItems = useCallback(async () => {
-    if (!isParent) return; // wellbeing & respite are mum & dad's private space
+    if (!isParent) return; // respite is mum & dad's private space
     const { data } = await supabase
       .from("checklist_items")
       .select("*")
       .eq("family_id", family.id)
-      .in("list_type", ["wellbeing_mum", "wellbeing_dad", "respite"])
-      .in("scope_key", [dayKey, weekKey])
+      .eq("list_type", "respite")
+      .eq("scope_key", weekKey)
       .order("sort_order")
       .order("created_at");
-    const items = (data as ChecklistItem[]) ?? [];
-    setWbMum(items.filter((i) => i.list_type === "wellbeing_mum" && i.scope_key === dayKey));
-    setWbDad(items.filter((i) => i.list_type === "wellbeing_dad" && i.scope_key === dayKey));
-    setRespite(items.filter((i) => i.list_type === "respite" && i.scope_key === weekKey));
-  }, [supabase, family.id, isParent, dayKey, weekKey]);
+    setRespite((data as ChecklistItem[]) ?? []);
+  }, [supabase, family.id, isParent, weekKey]);
 
   useEffect(() => {
     (async () => {
       if (isParent) {
-        await ensurePeriodItems(supabase, family.id, isParent, "wellbeing_mum", dayKey);
-        await ensurePeriodItems(supabase, family.id, isParent, "wellbeing_dad", dayKey);
         await ensurePeriodItems(supabase, family.id, isParent, "respite", weekKey);
         loadItems();
       }
@@ -94,6 +87,26 @@ export default function RestTab() {
       },
       { onConflict: "family_id,week_key,day_name,block_name" }
     );
+
+    // a "family" block IS a support job — keep the Support list in sync
+    const blockLabel = { AM: "morning", PM: "afternoon", Eve: "evening" }[block] ?? block;
+    const first = family.baby_name.split(" ")[0];
+    if (next === "family") {
+      await supabase.from("support_tasks").insert({
+        family_id: family.id,
+        task_text: `Sit with ${first} — ${day} ${blockLabel}`,
+        created_by: profile.id,
+        at_hospital: true,
+        shift_week: weekKey,
+        shift_day: day,
+        shift_block: block,
+      });
+    } else if (cur === "family") {
+      await supabase
+        .from("support_tasks")
+        .delete()
+        .match({ family_id: family.id, shift_week: weekKey, shift_day: day, shift_block: block });
+    }
     loadShifts();
   }
 
@@ -104,8 +117,6 @@ export default function RestTab() {
       .eq("id", item.id);
     loadItems();
   }
-
-  const wbAll = [...wbMum, ...wbDad];
 
   return (
     <section>
@@ -173,26 +184,15 @@ export default function RestTab() {
       </div>
 
       {isParent && (
-        <>
-          <div className="card">
-            <h2>Wellbeing today</h2>
-            <ProgressBar items={wbAll} />
-            <h3>Mum</h3>
-            <TickList items={wbMum} canEdit={isParent} onToggle={toggle} />
-            <h3>Dad</h3>
-            <TickList items={wbDad} canEdit={isParent} onToggle={toggle} />
-          </div>
-
-          <div className="card">
-            <h2>Respite this week</h2>
-            <p className="note">
-              Aim to tick at least three. The guilt of leaving is normal — go
-              anyway.
-            </p>
-            <ProgressBar items={respite} />
-            <TickList items={respite} canEdit={isParent} onToggle={toggle} />
-          </div>
-        </>
+        <div className="card">
+          <h2>Respite this week</h2>
+          <p className="note">
+            Aim to tick at least three. The guilt of leaving is normal — go
+            anyway.
+          </p>
+          <ProgressBar items={respite} />
+          <TickList items={respite} canEdit={isParent} onToggle={toggle} />
+        </div>
       )}
     </section>
   );

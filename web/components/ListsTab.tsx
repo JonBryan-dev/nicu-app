@@ -15,6 +15,8 @@ export default function ListsTab() {
   const weekKey = isoWeekKey(dayKey);
   const [daily, setDaily] = useState<ChecklistItem[]>([]);
   const [weekly, setWeekly] = useState<ChecklistItem[]>([]);
+  const [wbMum, setWbMum] = useState<ChecklistItem[]>([]);
+  const [wbDad, setWbDad] = useState<ChecklistItem[]>([]);
   const [newDaily, setNewDaily] = useState("");
   const [newWeekly, setNewWeekly] = useState("");
   const [dailyRoutine, setDailyRoutine] = useState(false);
@@ -26,7 +28,7 @@ export default function ListsTab() {
       .from("checklist_items")
       .select("*")
       .eq("family_id", family.id)
-      .in("list_type", ["daily", "weekly"])
+      .in("list_type", ["daily", "weekly", "wellbeing_mum", "wellbeing_dad"])
       .in("scope_key", [dayKey, weekKey])
       .eq("skipped", false)
       .order("sort_order")
@@ -34,12 +36,16 @@ export default function ListsTab() {
     const items = (data as ChecklistItem[]) ?? [];
     setDaily(items.filter((i) => i.list_type === "daily" && i.scope_key === dayKey));
     setWeekly(items.filter((i) => i.list_type === "weekly" && i.scope_key === weekKey));
+    setWbMum(items.filter((i) => i.list_type === "wellbeing_mum" && i.scope_key === dayKey));
+    setWbDad(items.filter((i) => i.list_type === "wellbeing_dad" && i.scope_key === dayKey));
   }, [supabase, family.id, isParent, dayKey, weekKey]);
 
   useEffect(() => {
     (async () => {
       await ensurePeriodItems(supabase, family.id, isParent, "daily", dayKey);
       await ensurePeriodItems(supabase, family.id, isParent, "weekly", weekKey);
+      await ensurePeriodItems(supabase, family.id, isParent, "wellbeing_mum", dayKey);
+      await ensurePeriodItems(supabase, family.id, isParent, "wellbeing_dad", dayKey);
       load();
     })();
   }, [supabase, family.id, isParent, dayKey, weekKey, load]);
@@ -220,6 +226,15 @@ export default function ListsTab() {
             </label>
           </form>
         )}
+      </div>
+
+      <div className="card">
+        <h2>Wellbeing today</h2>
+        <ProgressBar items={[...wbMum, ...wbDad]} />
+        <h3>Mum</h3>
+        <TickList items={wbMum} canEdit={isParent} onToggle={toggle} />
+        <h3>Dad</h3>
+        <TickList items={wbDad} canEdit={isParent} onToggle={toggle} />
       </div>
     </section>
   );

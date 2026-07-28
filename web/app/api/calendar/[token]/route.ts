@@ -98,6 +98,9 @@ export async function GET(
   const feedsShifted = feed.feeds_today.map((f) => ({
     ...f,
     started_at: new Date(+new Date(f.started_at) + off).toISOString(),
+    ended_at: f.ended_at
+      ? new Date(+new Date(f.ended_at) + off).toISOString()
+      : f.ended_at,
   }));
 
   // today's remaining pump sessions

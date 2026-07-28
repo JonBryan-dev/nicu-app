@@ -121,7 +121,7 @@ export default function GrowthCard() {
       {isParent &&
         (open ? (
           <form onSubmit={save} style={{ marginTop: 10 }}>
-            <div className="row">
+            <div className="row wrap">
               <div>
                 <label htmlFor="gc-w">Today&apos;s weight (kg)</label>
                 <input

@@ -87,7 +87,7 @@ export default function VisitsTab() {
             Only slots you open here can be booked — visits only happen when
             they suit you.
           </p>
-          <div className="row">
+          <div className="row wrap">
             <div>
               <label htmlFor="vs-date">Date</label>
               <input

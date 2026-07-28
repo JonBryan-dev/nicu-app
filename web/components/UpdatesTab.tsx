@@ -11,12 +11,30 @@ import { MILESTONE_FIRSTS, type Update } from "@/lib/types";
 
 type Mode = "free" | "guided";
 
+const REACTION_SET = ["💛", "🥹", "🎉", "💪"] as const;
+const MAX_FILE_MB = 50; // Supabase storage per-object default
+
+type CommentRow = {
+  id: string;
+  update_id: string;
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  author?: { display_name: string } | null;
+};
+type ReactionRow = { update_id: string; profile_id: string; emoji: string };
+
+const isVideo = (path: string) => /\.(mp4|mov|m4v|webm|ogv)$/i.test(path);
+
 export default function UpdatesTab() {
   const { supabase, profile, family, isParent } = useFamily();
   const isTeam = profile.role === "team";
   const canPost = isParent || isTeam;
   const [updates, setUpdates] = useState<Update[] | null>(null);
   const [urls, setUrls] = useState<Record<string, string>>({});
+  const [comments, setComments] = useState<Record<string, CommentRow[]>>({});
+  const [reactions, setReactions] = useState<Record<string, ReactionRow[]>>({});
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
 
   const [mode, setMode] = useState<Mode>("free");
   const [body, setBody] = useState("");
@@ -35,14 +53,35 @@ export default function UpdatesTab() {
   const textRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from("updates")
-      .select("*, author:profiles!updates_author_id_fkey(id, display_name)")
-      .eq("family_id", family.id)
-      .order("created_at", { ascending: false });
-    const rows = (data as Update[]) ?? [];
+    const [u, c, r] = await Promise.all([
+      supabase
+        .from("updates")
+        .select("*, author:profiles!updates_author_id_fkey(id, display_name)")
+        .eq("family_id", family.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("update_comments")
+        .select("*, author:profiles!update_comments_author_id_fkey(display_name)")
+        .eq("family_id", family.id)
+        .order("created_at"),
+      supabase
+        .from("update_reactions")
+        .select("update_id, profile_id, emoji")
+        .eq("family_id", family.id),
+    ]);
+    const rows = (u.data as Update[]) ?? [];
     setUpdates(rows);
-    const paths = rows.flatMap((u) => u.image_paths ?? []);
+    const byUpdate: Record<string, CommentRow[]> = {};
+    for (const row of (c.data as CommentRow[]) ?? []) {
+      (byUpdate[row.update_id] ??= []).push(row);
+    }
+    setComments(byUpdate);
+    const rByUpdate: Record<string, ReactionRow[]> = {};
+    for (const row of (r.data as ReactionRow[]) ?? []) {
+      (rByUpdate[row.update_id] ??= []).push(row);
+    }
+    setReactions(rByUpdate);
+    const paths = rows.flatMap((up) => up.image_paths ?? []);
     if (paths.length) setUrls(await signedUrlMap(supabase, paths));
   }, [supabase, family.id]);
 
@@ -50,6 +89,46 @@ export default function UpdatesTab() {
     load();
   }, [load]);
   useRealtime(supabase, "updates", family.id, load);
+  useRealtime(supabase, "update_comments", family.id, load);
+  useRealtime(supabase, "update_reactions", family.id, load);
+
+  async function toggleReaction(updateId: string, emoji: string) {
+    const mine = (reactions[updateId] ?? []).some(
+      (r) => r.profile_id === profile.id && r.emoji === emoji
+    );
+    if (mine) {
+      await supabase
+        .from("update_reactions")
+        .delete()
+        .match({ update_id: updateId, profile_id: profile.id, emoji });
+    } else {
+      await supabase.from("update_reactions").insert({
+        family_id: family.id,
+        update_id: updateId,
+        profile_id: profile.id,
+        emoji,
+      });
+    }
+    load();
+  }
+
+  async function addComment(updateId: string) {
+    const body = (drafts[updateId] ?? "").trim();
+    if (!body) return;
+    const { error } = await supabase.from("update_comments").insert({
+      family_id: family.id,
+      update_id: updateId,
+      author_id: profile.id,
+      body,
+    });
+    if (!error) setDrafts((d) => ({ ...d, [updateId]: "" }));
+    load();
+  }
+
+  async function deleteComment(id: string) {
+    await supabase.from("update_comments").delete().eq("id", id);
+    load();
+  }
 
   function tapFirst(first: string) {
     setMode("free");
@@ -60,9 +139,16 @@ export default function UpdatesTab() {
   }
 
   function onPickFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const picked = Array.from(e.target.files ?? []).filter((f) =>
-      f.type.startsWith("image/")
+    const all = Array.from(e.target.files ?? []).filter(
+      (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
     );
+    const tooBig = all.filter((f) => f.size > MAX_FILE_MB * 1024 * 1024);
+    if (tooBig.length) {
+      setErr(
+        `Videos need to be under ${MAX_FILE_MB}MB — trim it in Photos first and try again.`
+      );
+    }
+    const picked = all.filter((f) => f.size <= MAX_FILE_MB * 1024 * 1024);
     setFiles((prev) => [...prev, ...picked].slice(0, 6));
     if (fileRef.current) fileRef.current.value = "";
   }
@@ -171,7 +257,7 @@ export default function UpdatesTab() {
             />
           ) : (
             <div className="guided">
-              <div className="row">
+              <div className="row wrap">
                 <div>
                   <label htmlFor="g-w">Weight (kg)</label>
                   <input id="g-w" type="text" inputMode="decimal" value={gWeight} onChange={(e) => setGWeight(e.target.value)} placeholder="1.42" />
@@ -217,14 +303,14 @@ export default function UpdatesTab() {
           <input
             ref={fileRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/*"
             multiple
             onChange={onPickFiles}
             style={{ display: "none" }}
           />
           <div className="composer-row">
             <button type="button" className="ghost" onClick={() => fileRef.current?.click()}>
-              📷 Add photo{files.length ? ` (${files.length})` : ""}
+              📷 Photo / video{files.length ? ` (${files.length})` : ""}
             </button>
             <button className="primary" type="submit" disabled={busy}>
               {busy ? "Posting…" : "Post update"}
@@ -234,11 +320,15 @@ export default function UpdatesTab() {
             <div className="thumbs">
               {files.map((f, i) => (
                 <div key={i} className="thumb">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={URL.createObjectURL(f)} alt="" />
+                  {f.type.startsWith("video/") ? (
+                    <span className="vid" aria-label="Video">🎬</span>
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={URL.createObjectURL(f)} alt="" />
+                  )}
                   <button
                     type="button"
-                    aria-label="Remove photo"
+                    aria-label="Remove attachment"
                     onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
                   >
                     ✕
@@ -273,19 +363,86 @@ export default function UpdatesTab() {
                 <div className={`photos n${Math.min(u.image_paths.length, 3)}`}>
                   {u.image_paths.map((p) =>
                     urls[p] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img key={p} src={urls[p]} alt="Update photo" loading="lazy" />
+                      isVideo(p) ? (
+                        <video
+                          key={p}
+                          src={urls[p]}
+                          controls
+                          playsInline
+                          preload="metadata"
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={p} src={urls[p]} alt="Update photo" loading="lazy" />
+                      )
                     ) : (
                       <div key={p} className="photo-skel" />
                     )
                   )}
                 </div>
               )}
-              {(isParent || (isTeam && u.author_id === profile.id)) && (
-                <button className="tiny" onClick={() => remove(u)}>
-                  remove
+
+              {/* reactions — everyone in the space can love a moment */}
+              <div className="reactbar">
+                {REACTION_SET.map((e) => {
+                  const rs = (reactions[u.id] ?? []).filter((r) => r.emoji === e);
+                  const mine = rs.some((r) => r.profile_id === profile.id);
+                  return (
+                    <button
+                      key={e}
+                      type="button"
+                      className={mine ? "on" : ""}
+                      onClick={() => toggleReaction(u.id, e)}
+                      aria-pressed={mine}
+                      aria-label={`React ${e}`}
+                    >
+                      {e}
+                      {rs.length > 0 && <span className="rcount">{rs.length}</span>}
+                    </button>
+                  );
+                })}
+                {(isParent || (isTeam && u.author_id === profile.id)) && (
+                  <button type="button" className="tiny" style={{ marginLeft: "auto" }} onClick={() => remove(u)}>
+                    remove
+                  </button>
+                )}
+              </div>
+
+              {/* comments */}
+              {(comments[u.id] ?? []).map((c) => (
+                <div key={c.id} className="comment">
+                  <b>{c.author?.display_name ?? "Someone"}</b> {c.body}
+                  <span className="muted"> · {fmtStamp(c.created_at)}</span>
+                  {(isParent || c.author_id === profile.id) && (
+                    <button
+                      type="button"
+                      className="tiny"
+                      onClick={() => deleteComment(c.id)}
+                      aria-label="Delete comment"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              <form
+                className="row commentform"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  addComment(u.id);
+                }}
+              >
+                <input
+                  type="text"
+                  value={drafts[u.id] ?? ""}
+                  onChange={(e) => setDrafts((d) => ({ ...d, [u.id]: e.target.value }))}
+                  placeholder="Say something lovely…"
+                  aria-label="Add a comment"
+                />
+                <button className="ghost" style={{ flex: "0 0 auto" }} type="submit">
+                  Send
                 </button>
-              )}
+              </form>
             </div>
           ))
         )}

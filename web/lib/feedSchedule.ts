@@ -228,10 +228,13 @@ export function computeSchedule(
     });
   }
 
-  // anchor: last actual feed today, else today's planned day_from
+  // anchor: last actual session today — from its FINISH time when we have one
+  // (the rest gap starts when you stop, not when you started) — else the
+  // planned day start
   let anchor: Date;
   if (sorted.length) {
-    anchor = new Date(sorted[sorted.length - 1].started_at);
+    const last = sorted[sorted.length - 1];
+    anchor = new Date(last.ended_at ?? last.started_at);
   } else {
     anchor = new Date(now);
     const [h, m] = settings.day_from.split(":").map(Number);
