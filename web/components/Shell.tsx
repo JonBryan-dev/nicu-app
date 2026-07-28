@@ -6,14 +6,15 @@ import { useState } from "react";
 import { useFamily } from "@/components/FamilyProvider";
 import { dayNumber, fmtDate } from "@/lib/dates";
 import PushPrompt from "@/components/PushPrompt";
+import ThemePicker from "@/components/ThemePicker";
 
 const TABS = [
-  { href: "/", label: "Updates" },
-  { href: "/feeds", label: "Feeds", parentOnly: true },
-  { href: "/lists", label: "Lists", parentOnly: true },
-  { href: "/support", label: "Support" },
-  { href: "/visits", label: "Visits" },
-  { href: "/rest", label: "Rest" },
+  { href: "/", label: "Updates", icon: "✦" },
+  { href: "/feeds", label: "Feeds", icon: "🍼", parentOnly: true },
+  { href: "/lists", label: "Lists", icon: "☑️", parentOnly: true },
+  { href: "/support", label: "Support", icon: "💛" },
+  { href: "/visits", label: "Visits", icon: "📅" },
+  { href: "/rest", label: "Rest", icon: "😴" },
 ];
 
 export default function Shell({ children }: { children: React.ReactNode }) {
@@ -22,6 +23,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [showCodes, setShowCodes] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
   const [pw, setPw] = useState("");
   const [pwMsg, setPwMsg] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
@@ -68,10 +70,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               ·{" "}
             </>
           )}
+          <button onClick={() => setShowTheme((s) => !s)}>appearance</button> ·{" "}
           <button onClick={() => setShowPw((s) => !s)}>password</button> ·{" "}
           <button onClick={signOut}>sign out</button>
         </div>
       </div>
+
+      {showTheme && <ThemePicker />}
 
       {showPw && (
         <div className="card">
@@ -138,7 +143,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             href={t.href}
             className={pathname === t.href ? "on" : ""}
           >
-            {t.label}
+            <span className="ico" aria-hidden="true">{t.icon}</span>
+            <span>{t.label}</span>
           </Link>
         ))}
       </nav>

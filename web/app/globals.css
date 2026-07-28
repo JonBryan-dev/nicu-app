@@ -10,6 +10,44 @@
   --card: #ffffff;
   --radius: 16px;
   --sky: #7e93a8;
+  --shadow: 0 1px 3px rgba(46, 42, 51, 0.05), 0 4px 14px rgba(46, 42, 51, 0.04);
+  --on-accent: #fff;
+}
+
+/* ---------- colour themes ---------- */
+[data-theme="garden"] {
+  --linen: #f4f7f2;
+  --mist: #e2eae0;
+  --rose: #8fa98c;
+  --rose-deep: #5f7d5c;
+}
+[data-theme="dusk"] {
+  --linen: #f3f6f9;
+  --mist: #dfe8ee;
+  --rose: #8ca3b8;
+  --rose-deep: #5c7a96;
+}
+[data-theme="lavender"] {
+  --linen: #f7f4fa;
+  --mist: #e8e2f0;
+  --rose: #a493c4;
+  --rose-deep: #7a669b;
+}
+[data-theme="night"] {
+  --linen: #211e26;
+  --card: #2b2733;
+  --ink: #f2ede7;
+  --ink-soft: #b7aec0;
+  --mist: #3b3544;
+  --rose: #c98a8e;
+  --rose-deep: #d9a2a6;
+  --sage: #93b292;
+  --sky: #93a9be;
+  --shadow: none;
+  --on-accent: #211e26;
+}
+[data-theme="night"] .rolepick button.on {
+  background: #3a2f35;
 }
 * {
   box-sizing: border-box;
@@ -103,6 +141,7 @@ body {
   border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 12px;
+  box-shadow: var(--shadow);
 }
 h2 {
   font-family: var(--font-fraunces), Georgia, serif;
@@ -125,12 +164,17 @@ h3 {
 }
 button.primary {
   background: var(--rose-deep);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 12px;
-  padding: 11px 18px;
-  font: 700 0.9rem var(--font-nunito), sans-serif;
+  padding: 12px 20px;
+  font: 700 0.95rem var(--font-nunito), sans-serif;
   cursor: pointer;
+  transition: transform 0.08s ease, filter 0.15s ease;
+}
+button.primary:active {
+  transform: scale(0.97);
+  filter: brightness(0.95);
 }
 button.primary:disabled {
   opacity: 0.6;
@@ -167,8 +211,9 @@ textarea {
   width: 100%;
   border: 1px solid var(--mist);
   border-radius: 12px;
-  padding: 10px 12px;
-  font: 400 0.95rem var(--font-nunito), sans-serif;
+  padding: 11px 12px;
+  /* 16px minimum stops iOS Safari zooming the page on focus */
+  font: 400 1rem var(--font-nunito), sans-serif;
   color: var(--ink);
   background: var(--linen);
 }
@@ -243,7 +288,7 @@ label {
 .post .flag {
   display: inline-block;
   background: var(--rose);
-  color: #fff;
+  color: var(--on-accent);
   border-radius: 999px;
   padding: 2px 10px;
   font-size: 0.7rem;
@@ -283,7 +328,7 @@ label {
   text-decoration: line-through;
 }
 .progress {
-  height: 6px;
+  height: 8px;
   background: var(--mist);
   border-radius: 999px;
   overflow: hidden;
@@ -345,7 +390,7 @@ label {
 }
 .badge.booked {
   background: var(--sage);
-  color: #fff;
+  color: var(--on-accent);
 }
 /* shift grid */
 .shift {
@@ -367,10 +412,10 @@ label {
   width: 100%;
   border: none;
   border-radius: 8px;
-  padding: 8px 0;
+  padding: 9px 0;
   font: 700 0.68rem var(--font-nunito), sans-serif;
   cursor: pointer;
-  color: #fff;
+  color: var(--on-accent);
 }
 .chip:disabled {
   cursor: default;
@@ -572,8 +617,8 @@ select {
   width: 100%;
   border: 1px solid var(--mist);
   border-radius: 12px;
-  padding: 10px 12px;
-  font: 400 0.95rem var(--font-nunito), sans-serif;
+  padding: 11px 12px;
+  font: 400 1rem var(--font-nunito), sans-serif;
   color: var(--ink);
   background: var(--linen);
 }
@@ -628,6 +673,44 @@ select {
   flex: 0 0 auto;
   min-width: 0;
 }
+/* theme picker */
+.themes {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.theme {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: 600 0.75rem var(--font-nunito), sans-serif;
+  color: var(--ink-soft);
+  padding: 6px;
+  border-radius: 12px;
+}
+.theme.on {
+  color: var(--rose-deep);
+  background: var(--linen);
+}
+.theme .swatch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid;
+}
+.theme .swatch i {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
 .coach {
   margin-top: 12px;
   padding-top: 10px;
@@ -667,6 +750,68 @@ select {
 .hide {
   display: none !important;
 }
+
+/* tab icons: hidden on desktop pills, shown on the mobile bottom bar */
+.tabs a .ico {
+  display: none;
+}
+
+/* ---------- iPhone: bottom thumb-reach tab bar ---------- */
+@media (max-width: 640px) {
+  .tabs {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    background: var(--card);
+    border-top: 1px solid var(--mist);
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    gap: 2px;
+    box-shadow: 0 -2px 12px rgba(46, 42, 51, 0.06);
+  }
+  .tabs a {
+    border: none;
+    background: none;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 2px;
+    font-size: 0.62rem;
+    min-height: 48px;
+    justify-content: center;
+  }
+  .tabs a .ico {
+    display: block;
+    font-size: 1.2rem;
+    line-height: 1.1;
+  }
+  .tabs a.on {
+    background: var(--linen);
+    border: none;
+    color: var(--rose-deep);
+    font-weight: 800;
+  }
+  .wrap {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+  .hero {
+    padding-top: calc(18px + env(safe-area-inset-top));
+  }
+  /* full-width primary actions feel better under a thumb */
+  .card > form button.primary,
+  .card button.primary {
+    width: 100%;
+  }
+  .row button.primary,
+  .composer-row button.primary {
+    width: auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
