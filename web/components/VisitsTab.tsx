@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useFamily } from "@/components/FamilyProvider";
 import { useRealtime } from "@/lib/useRealtime";
 import { todayKey, fmtDate, fmtTime } from "@/lib/dates";
-import type { VisitSlot } from "@/lib/types";
+import type { Profile, VisitSlot } from "@/lib/types";
 
 export default function VisitsTab() {
   const { supabase, profile, family, isParent } = useFamily();
@@ -17,6 +17,8 @@ export default function VisitsTab() {
   const [until, setUntil] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
+  const [members, setMembers] = useState<Profile[]>([]);
+  const [bookingFor, setBookingFor] = useState<string | null>(null); // slot id with picker open
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -33,6 +35,18 @@ export default function VisitsTab() {
     load();
   }, [load]);
   useRealtime(supabase, "visit_slots", family.id, load);
+
+  // parents can book someone in — load the family list for the picker
+  useEffect(() => {
+    if (!isParent) return;
+    supabase
+      .from("profiles")
+      .select("id, display_name, role")
+      .eq("family_id", family.id)
+      .neq("role", "team")
+      .order("display_name")
+      .then(({ data }) => setMembers((data as Profile[]) ?? []));
+  }, [isParent, supabase, family.id]);
 
   async function addSlot(e: React.FormEvent) {
     e.preventDefault();
@@ -106,6 +120,26 @@ export default function VisitsTab() {
     const { error } = await supabase
       .from("visit_slots")
       .update({ booked_by: mine ? null : profile.id })
+      .eq("id", slot.id);
+    if (error) alert(error.message);
+    load();
+  }
+
+  // parents only: book a chosen family member into a free slot / clear any booking
+  async function bookMemberIn(slot: VisitSlot, memberId: string) {
+    const { error } = await supabase
+      .from("visit_slots")
+      .update({ booked_by: memberId })
+      .eq("id", slot.id);
+    if (error) alert(error.message);
+    setBookingFor(null);
+    load();
+  }
+
+  async function unbook(slot: VisitSlot) {
+    const { error } = await supabase
+      .from("visit_slots")
+      .update({ booked_by: null })
       .eq("id", slot.id);
     if (error) alert(error.message);
     load();
@@ -218,32 +252,71 @@ export default function VisitsTab() {
               {g.slots.map((s) => {
                 const mine = s.booked_by === profile.id;
                 return (
-                  <div key={s.id} className="slot">
-                    <div style={{ flex: 1 }}>
-                      <span className="t">
-                        {fmtTime(s.start_time)} – {fmtTime(s.end_time)}
-                      </span>{" "}
-                      {s.booked_by ? (
-                        <span className="badge booked">
-                          {mine ? "You" : s.booker?.display_name ?? "Booked"}
-                        </span>
-                      ) : (
-                        <span className="badge">Free</span>
+                  <div key={s.id}>
+                    <div className="slot">
+                      <div style={{ flex: 1 }}>
+                        <span className="t">
+                          {fmtTime(s.start_time)} – {fmtTime(s.end_time)}
+                        </span>{" "}
+                        {s.booked_by ? (
+                          <span className="badge booked">
+                            {mine ? "You" : s.booker?.display_name ?? "Booked"}
+                          </span>
+                        ) : (
+                          <span className="badge">Free</span>
+                        )}
+                      </div>
+                      {!s.booked_by &&
+                        (isParent ? (
+                          <button
+                            className="ghost"
+                            onClick={() =>
+                              setBookingFor(bookingFor === s.id ? null : s.id)
+                            }
+                          >
+                            Book…
+                          </button>
+                        ) : (
+                          <button className="ghost" onClick={() => toggleBooking(s)}>
+                            Book
+                          </button>
+                        ))}
+                      {s.booked_by && mine && (
+                        <button className="ghost" onClick={() => toggleBooking(s)}>
+                          Cancel
+                        </button>
+                      )}
+                      {s.booked_by && !mine && isParent && (
+                        <button className="ghost" onClick={() => unbook(s)}>
+                          Unbook
+                        </button>
+                      )}
+                      {isParent && (
+                        <button
+                          className="tiny"
+                          onClick={() => removeSlot(s)}
+                          aria-label="Delete slot"
+                        >
+                          ✕
+                        </button>
                       )}
                     </div>
-                    {(!s.booked_by || mine) && (
-                      <button className="ghost" onClick={() => toggleBooking(s)}>
-                        {mine ? "Cancel" : "Book"}
-                      </button>
-                    )}
-                    {isParent && (
-                      <button
-                        className="tiny"
-                        onClick={() => removeSlot(s)}
-                        aria-label="Delete slot"
-                      >
-                        ✕
-                      </button>
+                    {isParent && bookingFor === s.id && !s.booked_by && (
+                      <div className="linkslots">
+                        <span className="muted">Who&apos;s coming?</span>
+                        {members.map((m) => (
+                          <button
+                            key={m.id}
+                            className="ghost"
+                            onClick={() => bookMemberIn(s, m.id)}
+                          >
+                            {m.id === profile.id ? "Me" : m.display_name}
+                          </button>
+                        ))}
+                        <button className="tiny" onClick={() => setBookingFor(null)}>
+                          not now
+                        </button>
+                      </div>
                     )}
                   </div>
                 );
