@@ -30,9 +30,29 @@ type FeedPayload = {
 const esc = (s: string) =>
   s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
 
+// Vercel runs in UTC; the family lives on London wall-clock time. We shift all
+// timestamps by London's current offset BEFORE scheduling/formatting, so the
+// floating times in the ICS read correctly in the UK (incl. BST).
+function londonOffsetMs(at: Date): number {
+  const f = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/London",
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const p = Object.fromEntries(
+    f.formatToParts(at).map((x) => [x.type, x.value])
+  ) as Record<string, string>;
+  const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute);
+  return asUTC - at.getTime();
+}
+
 function dt(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}00`;
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}00`;
 }
 function dtFrom(dateStr: string, timeStr: string): string {
   return dateStr.replace(/-/g, "") + "T" + timeStr.slice(0, 5).replace(":", "") + "00";
@@ -71,8 +91,16 @@ export async function GET(
   const settings = feed.settings ?? DEFAULT_SETTINGS;
   const events: string[] = [];
 
+  // shift everything onto London wall-clock (see londonOffsetMs)
+  const off = londonOffsetMs(new Date());
+  const nowLondon = new Date(Date.now() + off);
+  const feedsShifted = feed.feeds_today.map((f) => ({
+    ...f,
+    started_at: new Date(+new Date(f.started_at) + off).toISOString(),
+  }));
+
   // today's planned feeds (skip already-logged ones)
-  const schedule = computeSchedule(settings, feed.feeds_today, feed.sleep_windows, feed.slots);
+  const schedule = computeSchedule(settings, feedsShifted, feed.sleep_windows, feed.slots, nowLondon);
   schedule
     .filter((s) => !s.logged)
     .forEach((s, i) => {
@@ -108,7 +136,7 @@ export async function GET(
   }
 
   // protected sleep windows for the next 7 days
-  const today = new Date();
+  const today = new Date(nowLondon);
   for (let d = 0; d < 7; d++) {
     const day = new Date(today);
     day.setDate(day.getDate() + d);
