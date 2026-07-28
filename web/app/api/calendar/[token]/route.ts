@@ -111,7 +111,11 @@ export async function GET(
           ? " (before sleep)"
           : s.assigned === "post-sleep"
             ? " (on waking)"
-            : "";
+            : s.assigned === "pre-meal"
+              ? " (before break)"
+              : s.assigned === "post-meal"
+                ? " (after break)"
+                : "";
       events.push(vevent(`pump-${i}-${dt(s.at)}@nicu`, dt(s.at), dt(end), `🥛 Pump${note}`));
     });
 
@@ -169,16 +173,17 @@ export async function GET(
     const dateStr = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
     for (const w of feed.sleep_windows) {
       const label = w.person === "mum" ? "Mum" : "Dad";
+      const meal = w.kind === "meal";
       const wraps = w.end_time < w.start_time;
       const endDay = new Date(day);
       if (wraps) endDay.setDate(endDay.getDate() + 1);
       const endStr = `${endDay.getFullYear()}-${String(endDay.getMonth() + 1).padStart(2, "0")}-${String(endDay.getDate()).padStart(2, "0")}`;
       events.push(
         vevent(
-          `sleep-${w.person}-${dateStr}@nicu`,
+          `${meal ? "meal" : "sleep"}-${w.person}-${w.start_time.slice(0, 5)}-${dateStr}@nicu`,
           dtFrom(dateStr, w.start_time),
           dtFrom(endStr, w.end_time),
-          `😴 ${label}'s protected sleep`
+          meal ? `🍽 ${label}'s meal break` : `😴 ${label}'s protected sleep`
         )
       );
     }

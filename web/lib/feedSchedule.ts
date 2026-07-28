@@ -22,6 +22,7 @@ export interface SleepWindowRow {
   person: "mum" | "dad";
   start_time: string;
   end_time: string;
+  kind?: "sleep" | "meal"; // meals: Mum's lunch/dinner breaks
 }
 export interface FeedRow {
   started_at: string;
@@ -39,9 +40,17 @@ export interface ScheduleEntry {
   logged: boolean;
   ml?: number | null;
   // feeds: 'Mum'/'Dad' = the awake parent; 'unit' = both asleep, ward covers.
-  // pumping: 'pre-sleep'/'post-sleep' = session moved to bracket Mum's
-  // protected sleep instead of landing inside it.
-  assigned: "Mum" | "Dad" | "unit" | "pre-sleep" | "post-sleep" | null;
+  // pumping: session moved to bracket a protected window (sleep or meal)
+  // instead of landing inside it.
+  assigned:
+    | "Mum"
+    | "Dad"
+    | "unit"
+    | "pre-sleep"
+    | "post-sleep"
+    | "pre-meal"
+    | "post-meal"
+    | null;
   duringVisit: string | null; // booker name or 'free slot'
 }
 
@@ -89,15 +98,22 @@ export function computeGaps(s: FeedSettingsRow): {
   return { dayGap, nightGap };
 }
 
-function intervalAt(minOfDay: number, s: FeedSettingsRow): number {
+function intervalAt(
+  minOfDay: number,
+  s: FeedSettingsRow,
+  dayGapOverride?: number
+): number {
   const { dayGap, nightGap } = computeGaps(s);
-  return inWindow(minOfDay, s.day_from, s.night_from) ? dayGap : nightGap;
+  return inWindow(minOfDay, s.day_from, s.night_from)
+    ? dayGapOverride ?? dayGap
+    : nightGap;
 }
 
 function assignFor(
   minOfDay: number,
-  windows: SleepWindowRow[]
+  allWindows: SleepWindowRow[]
 ): "Mum" | "Dad" | "unit" | null {
+  const windows = allWindows.filter((w) => (w.kind ?? "sleep") === "sleep");
   const mumAsleep = windows.some(
     (w) => w.person === "mum" && inWindow(minOfDay, w.start_time, w.end_time)
   );
@@ -142,22 +158,29 @@ const MIN_PUMP_GAP_MS = 45 * 60000;
 function nextPump(
   from: Date,
   settings: FeedSettingsRow,
-  windows: SleepWindowRow[]
-): { at: Date; tag: "pre-sleep" | "post-sleep" | null } {
+  windows: SleepWindowRow[],
+  dayGapOverride?: number
+): {
+  at: Date;
+  tag: "pre-sleep" | "post-sleep" | "pre-meal" | "post-meal" | null;
+} {
   const minOfDay = from.getHours() * 60 + from.getMinutes();
-  const gapMs = intervalAt(minOfDay, settings) * 60000;
+  const gapMs = intervalAt(minOfDay, settings, dayGapOverride) * 60000;
   const cand = new Date(+from + gapMs);
+  // pumps plan around Mum's protected windows — sleep AND meal breaks
   for (const w of windows.filter((x) => x.person === "mum")) {
     const b = windowBoundsAround(cand, w);
     if (!b) continue;
-    // pull the session forward to just before sleep only if a decent share of
-    // the gap has passed — otherwise it waits until waking (no double-pumping
-    // an hour apart around a sleep cycle)
-    const preSleepOk =
+    const kind = w.kind ?? "sleep";
+    // pull the session forward to just before the window only if a decent
+    // share of the gap has passed — otherwise it waits until the window ends
+    // (no double-pumping an hour apart around a sleep cycle or lunch)
+    const preOk =
       +b.start > +from &&
       +b.start - +from >= Math.max(MIN_PUMP_GAP_MS, gapMs * 0.5);
-    if (preSleepOk) return { at: b.start, tag: "pre-sleep" };
-    return { at: b.end, tag: "post-sleep" };
+    if (preOk)
+      return { at: b.start, tag: kind === "meal" ? "pre-meal" : "pre-sleep" };
+    return { at: b.end, tag: kind === "meal" ? "post-meal" : "post-sleep" };
   }
   return { at: cand, tag: null };
 }
@@ -232,33 +255,59 @@ export function computeSchedule(
     });
   }
 
+  if (pumping) {
+    // Project the rest of the day, bracketing Mum's protected windows.
+    // feeds_per_day is a MINIMUM session count: if bracketing squeezes the
+    // day below it, tighten the daytime gap and re-plan until it fits.
+    const project = (dayGapOverride?: number): ScheduleEntry[] => {
+      const out: ScheduleEntry[] = [];
+      let t = new Date(anchor);
+      let guard = 0;
+      while (guard++ < 30) {
+        const { at, tag } = nextPump(t, settings, windows, dayGapOverride);
+        if (+at <= +t) break; // safety against zero-progress
+        if (at >= endOfDay) break;
+        out.push({
+          at: new Date(at),
+          logged: false,
+          assigned: tag,
+          duringVisit: visitFor(at, slots),
+        });
+        t = at;
+      }
+      return out;
+    };
+
+    let dayGap = computeGaps(settings).dayGap;
+    let planned = project(dayGap);
+    const minSessions = settings.feeds_per_day ?? 0;
+    let attempts = 0;
+    while (
+      minSessions > 0 &&
+      sorted.length + planned.length < minSessions &&
+      dayGap > 75 &&
+      attempts++ < 8
+    ) {
+      dayGap = Math.max(75, dayGap - 15);
+      planned = project(dayGap);
+    }
+    entries.push(...planned);
+    return entries;
+  }
+
   let t = new Date(anchor);
   let guard = 0;
   while (guard++ < 30) {
-    if (pumping) {
-      // smarter stepping: sessions bracket Mum's sleep instead of landing in it
-      const { at, tag } = nextPump(t, settings, windows);
-      if (+at <= +t) break; // safety against zero-progress
-      if (at >= endOfDay) break;
-      entries.push({
-        at: new Date(at),
-        logged: false,
-        assigned: tag,
-        duringVisit: visitFor(at, slots),
-      });
-      t = at;
-    } else {
-      const minOfDay = t.getHours() * 60 + t.getMinutes();
-      t = new Date(+t + intervalAt(minOfDay, settings) * 60000);
-      if (t >= endOfDay) break;
-      const mm = t.getHours() * 60 + t.getMinutes();
-      entries.push({
-        at: new Date(t),
-        logged: false,
-        assigned: assignFor(mm, windows),
-        duringVisit: visitFor(t, slots),
-      });
-    }
+    const minOfDay = t.getHours() * 60 + t.getMinutes();
+    t = new Date(+t + intervalAt(minOfDay, settings) * 60000);
+    if (t >= endOfDay) break;
+    const mm = t.getHours() * 60 + t.getMinutes();
+    entries.push({
+      at: new Date(t),
+      logged: false,
+      assigned: assignFor(mm, windows),
+      duringVisit: visitFor(t, slots),
+    });
   }
   return entries;
 }

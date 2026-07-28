@@ -253,9 +253,16 @@ export default function FeedsTab() {
     });
   }
 
-  async function addWindow(person: "mum" | "dad", start_time: string, end_time: string) {
+  async function addWindow(
+    person: "mum" | "dad",
+    kind: "sleep" | "meal",
+    start_time: string,
+    end_time: string
+  ) {
     if (!start_time || !end_time) return;
-    await supabase.from("sleep_windows").insert({ family_id: family.id, person, start_time, end_time });
+    await supabase
+      .from("sleep_windows")
+      .insert({ family_id: family.id, person, kind, start_time, end_time });
     load();
   }
 
@@ -277,33 +284,13 @@ export default function FeedsTab() {
         <h2>{family.baby_name}&apos;s feeds <span className="muted">· set by the unit</span></h2>
         {!settings.baby_interval_min ? (
           <p className="note">
-            Add the unit&apos;s plan under <b>Edit the plan</b> below (how often + ml) and her day appears here.
+            Add the unit&apos;s plan under <b>Edit the plan</b> below (how often + ml) and her daily needs appear here.
           </p>
         ) : (
-          <>
-            <p className="muted" style={{ marginBottom: 6 }}>
-              every {Math.round((settings.baby_interval_min / 60) * 10) / 10}h · {settings.baby_ml ?? "?"} ml each ·{" "}
-              {babyFeedsPerDay(settings)} feeds ≈ {babyNeedsPerDay || "?"} ml/day
-            </p>
-            {babyTimes.length === 0 ? (
-              <p className="muted">
-                Times roll with the ward&apos;s day — set a first-feed time in the plan if you want them listed here.
-              </p>
-            ) : (
-              babyTimes.map((t) => (
-                <div key={t.time} className="feedrow">
-                  <span className="t">🍼 {t.time}</span>
-                  <span className="info">
-                    {t.duringVisit
-                      ? t.duringVisit === "free slot"
-                        ? "during an open slot"
-                        : `during ${t.duringVisit}'s visit`
-                      : ""}
-                  </span>
-                </div>
-              ))
-            )}
-          </>
+          <p style={{ fontWeight: 600 }}>
+            🍼 every {Math.round((settings.baby_interval_min / 60) * 10) / 10}h · {settings.baby_ml ?? "?"} ml each ·{" "}
+            {babyFeedsPerDay(settings)} feeds ≈ <b>{babyNeedsPerDay || "?"} ml/day</b>
+          </p>
         )}
       </div>
 
@@ -402,13 +389,20 @@ export default function FeedsTab() {
                         ? [
                             rec && rec.method !== "pump" ? rec.method : null,
                             s.ml != null ? `${s.ml} ml` : "logged",
+                            rec?.ml != null && settings.target_ml && rec.ml < settings.target_ml
+                              ? "⚠ under minimum"
+                              : null,
                           ].filter(Boolean).join(" · ")
                         : [
                             s.assigned === "pre-sleep"
                               ? "last one before Mum's sleep 😴"
                               : s.assigned === "post-sleep"
                                 ? "first one after waking ☀️"
-                                : null,
+                                : s.assigned === "pre-meal"
+                                  ? "before Mum's break 🍽"
+                                  : s.assigned === "post-meal"
+                                    ? "after Mum's break 🍽"
+                                    : null,
                             s.duringVisit ? (s.duringVisit === "free slot" ? "during an open slot" : `during ${s.duringVisit}'s visit`) : null,
                           ].filter(Boolean).join(" · ") || "planned"}
                     </span>
@@ -461,10 +455,6 @@ export default function FeedsTab() {
             <h3>{family.baby_name.split(" ")[0]}&apos;s feeds (unit&apos;s plan)</h3>
             <div className="row wrap">
               <div>
-                <label>First feed (optional)</label>
-                <input type="time" value={settings.baby_first_feed?.slice(0, 5) ?? ""} onChange={(e) => saveSettings({ baby_first_feed: e.target.value || null })} />
-              </div>
-              <div>
                 <label>How often</label>
                 <select value={settings.baby_interval_min ?? 0} onChange={(e) => saveSettings({ baby_interval_min: +e.target.value || null })}>
                   <option value={0}>Not set</option>
@@ -482,7 +472,7 @@ export default function FeedsTab() {
             <h3>Your pumping</h3>
             <div className="row wrap">
               <div>
-                <label>Pumps in 24h</label>
+                <label>Minimum pumps in 24h</label>
                 <select value={settings.feeds_per_day ?? 8} onChange={(e) => saveSettings({ feeds_per_day: +e.target.value })}>
                   {[6, 7, 8, 9, 10, 11, 12].map((n) => (
                     <option key={n} value={n}>{n} pumps</option>
@@ -508,7 +498,7 @@ export default function FeedsTab() {
                 <input type="time" value={settings.night_from.slice(0, 5)} onChange={(e) => saveSettings({ night_from: e.target.value })} />
               </div>
               <div>
-                <label>Target ml/pump</label>
+                <label>Minimum ml/pump</label>
                 <input type="text" inputMode="numeric" defaultValue={settings.target_ml ?? ""} onBlur={(e) => saveSettings({ target_ml: e.target.value ? +e.target.value : null })} placeholder="60" />
               </div>
             </div>
@@ -516,15 +506,27 @@ export default function FeedsTab() {
               Pump gaps work out at ≈ {Math.round(gaps.dayGap / 6) / 10}h by day with this plan.
             </p>
 
-            {(["mum", "dad"] as const).map((person) => (
-              <SleepWindows
-                key={person}
-                person={person}
-                windows={windows.filter((w) => w.person === person)}
-                onAdd={(s, e) => addWindow(person, s, e)}
-                onRemove={removeWindow}
-              />
-            ))}
+            <SleepWindows
+              title="Mum's protected sleep"
+              icon="😴"
+              windows={windows.filter((w) => w.person === "mum" && (w.kind ?? "sleep") === "sleep")}
+              onAdd={(s, e) => addWindow("mum", "sleep", s, e)}
+              onRemove={removeWindow}
+            />
+            <SleepWindows
+              title="Mum's meal breaks"
+              icon="🍽"
+              windows={windows.filter((w) => w.person === "mum" && w.kind === "meal")}
+              onAdd={(s, e) => addWindow("mum", "meal", s, e)}
+              onRemove={removeWindow}
+            />
+            <SleepWindows
+              title="Dad's protected sleep"
+              icon="😴"
+              windows={windows.filter((w) => w.person === "dad" && (w.kind ?? "sleep") === "sleep")}
+              onAdd={(s, e) => addWindow("dad", "sleep", s, e)}
+              onRemove={removeWindow}
+            />
             <button className="tiny" style={{ marginTop: 8 }} onClick={() => setShowPlan(false)}>Done</button>
           </>
         )}
@@ -549,34 +551,35 @@ export default function FeedsTab() {
 }
 
 function SleepWindows({
-  person,
+  title,
+  icon,
   windows,
   onAdd,
   onRemove,
 }: {
-  person: "mum" | "dad";
+  title: string;
+  icon: string;
   windows: SleepWindowRow[];
   onAdd: (start: string, end: string) => void;
   onRemove: (id: string) => void;
 }) {
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
-  const label = person === "mum" ? "Mum" : "Dad";
   return (
     <div style={{ marginTop: 10 }}>
-      <label>{label}&apos;s protected sleep</label>
+      <label>{title}</label>
       {windows.map((w) => (
         <div key={w.id} className="sleeprow">
-          <span>😴 {w.start_time.slice(0, 5)} – {w.end_time.slice(0, 5)}</span>
-          <button type="button" className="tiny" onClick={() => w.id && onRemove(w.id)} aria-label={`Remove ${label}'s sleep window`}>✕</button>
+          <span>{icon} {w.start_time.slice(0, 5)} – {w.end_time.slice(0, 5)}</span>
+          <button type="button" className="tiny" onClick={() => w.id && onRemove(w.id)} aria-label={`Remove ${title} window`}>✕</button>
         </div>
       ))}
       <div className="row wrap" style={{ alignItems: "flex-end" }}>
         <div>
-          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} aria-label={`${label} sleep from`} />
+          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} aria-label={`${title} from`} />
         </div>
         <div>
-          <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} aria-label={`${label} sleep until`} />
+          <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} aria-label={`${title} until`} />
         </div>
         <button
           type="button"
