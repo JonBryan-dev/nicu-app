@@ -18,6 +18,7 @@ import {
   type SlotRow,
 } from "@/lib/feedSchedule";
 import { todayKey, dayNumber } from "@/lib/dates";
+import PowerPump from "@/components/PowerPump";
 
 type FeedRecord = {
   id: string;
@@ -393,12 +394,21 @@ export default function FeedsTab() {
         ) : (
           <>
             <p className="note">Starting the timer logs the pump and re-plans the rest of today&apos;s sessions.</p>
-            <div className="row">
+            <div className="row wrap">
               <button className="primary" onClick={startFeed} style={{ flex: "0 0 auto" }}>Start pumping now</button>
+              <PowerPump
+                supabase={supabase}
+                familyId={family.id}
+                profileId={profile.id}
+                onDone={load}
+              />
               <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setShowPast((s) => !s)}>
                 Log a past one
               </button>
             </div>
+            <p className="muted" style={{ marginTop: 6 }}>
+              Power pump runs an hour of pump/rest intervals to nudge supply up.
+            </p>
             {showPast && (
               <form onSubmit={logPastFeed} style={{ marginTop: 10 }}>
                 <div className="row wrap">

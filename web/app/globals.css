@@ -655,6 +655,32 @@ label {
   color: var(--ink-soft);
   margin-left: 4px;
 }
+/* power pump */
+.card.pp {
+  max-width: 420px;
+  text-align: center;
+}
+.ppphase {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  padding: 10px 0 2px;
+}
+.ppphase.rest {
+  color: var(--sage);
+}
+.ppphase.pump {
+  color: var(--rose-deep);
+}
+.pptime {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 4rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.card.pp .row {
+  justify-content: center;
+}
 .installsteps {
   margin: 0 0 4px 20px;
   padding: 0;
