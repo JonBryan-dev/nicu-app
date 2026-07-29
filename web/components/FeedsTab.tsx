@@ -456,7 +456,12 @@ export default function FeedsTab() {
                   </div>
                 ) : (
                   <>
-                    <span className="t">{s.logged ? "✓" : "·"} {fmtHM(s.at)}</span>
+                    <span className="t">
+                      {s.logged ? "✓" : "·"} {fmtHM(s.at)}
+                      {s.at.getDate() !== new Date().getDate() && (
+                        <span className="muted" style={{ fontWeight: 600 }}> +1</span>
+                      )}
+                    </span>
                     <span className="info" style={{ flex: 1 }}>
                       {s.logged
                         ? [

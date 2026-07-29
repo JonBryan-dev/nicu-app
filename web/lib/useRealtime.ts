@@ -27,8 +27,18 @@ export function useRealtime(
         () => cb.current()
       )
       .subscribe();
+
+    // iOS suspends the websocket while the app is backgrounded — refetch on
+    // resume so reopened screens never show a stale picture
+    const onWake = () => {
+      if (document.visibilityState === "visible") cb.current();
+    };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
     return () => {
       supabase.removeChannel(channel);
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
     };
   }, [supabase, table, familyId]);
 }
