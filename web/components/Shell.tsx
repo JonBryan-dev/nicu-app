@@ -61,6 +61,24 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [showPw, setShowPw] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
   const [members, setMembers] = useState<(Profile & { created_at?: string })[]>([]);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameVal, setRenameVal] = useState("");
+
+  async function saveRename(id: string) {
+    const name = renameVal.trim();
+    if (!name) return;
+    const { error } = await supabase
+      .from("profiles")
+      .update({ display_name: name })
+      .eq("id", id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setMembers((ms) => ms.map((m) => (m.id === id ? { ...m, display_name: name } : m)));
+    setRenamingId(null);
+    if (id === profile.id) router.refresh();
+  }
 
   // iOS: while the keyboard is up, Safari detaches fixed elements from the
   // visual viewport — hide the bottom bar during typing so it can't float
@@ -208,22 +226,67 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <label>Who&apos;s here ({members.length})</label>
           {members.map((m) => (
             <div key={m.id} className="memberrow">
-              <span>
-                {m.display_name}
-                {m.id === profile.id && <span className="muted"> (you)</span>}
-              </span>
-              <span
-                className="badge"
-                style={
-                  m.role === "parent"
-                    ? { background: "var(--rose-deep)", color: "var(--on-accent)" }
-                    : m.role === "team"
-                      ? { background: "var(--sky)", color: "var(--on-accent)" }
-                      : undefined
-                }
-              >
-                {m.role === "parent" ? "Parent" : m.role === "team" ? "NICU team" : "Family"}
-              </span>
+              {renamingId === m.id ? (
+                <form
+                  className="row"
+                  style={{ flex: 1 }}
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    saveRename(m.id);
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={renameVal}
+                    onChange={(e) => setRenameVal(e.target.value)}
+                    aria-label="New name"
+                    autoFocus
+                  />
+                  <button className="ghost" style={{ flex: "0 0 auto" }} type="submit">
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="tiny"
+                    onClick={() => setRenamingId(null)}
+                  >
+                    ✕
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <span>
+                    {m.display_name}
+                    {m.id === profile.id && <span className="muted"> (you)</span>}
+                  </span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {isParent && (
+                      <button
+                        className="tiny"
+                        onClick={() => {
+                          setRenamingId(m.id);
+                          setRenameVal(m.display_name);
+                        }}
+                        aria-label={`Rename ${m.display_name}`}
+                      >
+                        rename
+                      </button>
+                    )}
+                    <span
+                      className="badge"
+                      style={
+                        m.role === "parent"
+                          ? { background: "var(--rose-deep)", color: "var(--on-accent)" }
+                          : m.role === "team"
+                            ? { background: "var(--sky)", color: "var(--on-accent)" }
+                            : undefined
+                      }
+                    >
+                      {m.role === "parent" ? "Parent" : m.role === "team" ? "NICU team" : "Family"}
+                    </span>
+                  </span>
+                </>
+              )}
             </div>
           ))}
           <p className="muted" style={{ marginTop: 8 }}>
