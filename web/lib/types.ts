@@ -21,7 +21,7 @@ export const MILESTONE_FIRSTS = [
 ] as const;
 export interface ChecklistItem { id: string; family_id: string; list_type: ListType; scope_key: string; template_id: string | null; item_text: string; done: boolean; skipped?: boolean; sort_order: number; }
 export interface SupportTask { id: string; family_id: string; task_text: string; claimed_by: string | null; at_hospital?: boolean; slot_id?: string | null; created_at: string; claimer?: Profile | null; }
-export interface VisitSlot { id: string; family_id: string; slot_date: string; start_time: string; end_time: string; booked_by: string | null; booker?: Profile | null; }
+export interface VisitSlot { id: string; family_id: string; slot_date: string; start_time: string; end_time: string; booked_by: string | null; booked_name?: string | null; booker?: Profile | null; }
 export interface ShiftBlock { family_id: string; week_key: string; day_name: "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun"; block_name: "AM"|"PM"|"Eve"; assignee: ShiftAssignee; }
 
 // Period keys (compute in Europe/London)

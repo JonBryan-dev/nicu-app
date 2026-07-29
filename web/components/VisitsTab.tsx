@@ -19,6 +19,7 @@ export default function VisitsTab() {
   const [msg, setMsg] = useState("");
   const [members, setMembers] = useState<Profile[]>([]);
   const [bookingFor, setBookingFor] = useState<string | null>(null); // slot id with picker open
+  const [guestName, setGuestName] = useState("");
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -125,21 +126,35 @@ export default function VisitsTab() {
     load();
   }
 
-  // parents only: book a chosen family member into a free slot / clear any booking
+  // parents only: book a chosen family member into a free slot
   async function bookMemberIn(slot: VisitSlot, memberId: string) {
     const { error } = await supabase
       .from("visit_slots")
-      .update({ booked_by: memberId })
+      .update({ booked_by: memberId, booked_name: null })
       .eq("id", slot.id);
     if (error) alert(error.message);
     setBookingFor(null);
     load();
   }
 
+  // parents only: book a non-member visitor by name
+  async function bookGuestIn(slot: VisitSlot) {
+    const name = guestName.trim();
+    if (!name) return;
+    const { error } = await supabase
+      .from("visit_slots")
+      .update({ booked_name: name, booked_by: null })
+      .eq("id", slot.id);
+    if (error) alert(error.message);
+    setBookingFor(null);
+    setGuestName("");
+    load();
+  }
+
   async function unbook(slot: VisitSlot) {
     const { error } = await supabase
       .from("visit_slots")
-      .update({ booked_by: null })
+      .update({ booked_by: null, booked_name: null })
       .eq("id", slot.id);
     if (error) alert(error.message);
     load();
@@ -251,6 +266,7 @@ export default function VisitsTab() {
               <div className="datehead">{fmtDate(g.date)}</div>
               {g.slots.map((s) => {
                 const mine = s.booked_by === profile.id;
+                const booked = !!s.booked_by || !!s.booked_name;
                 return (
                   <div key={s.id}>
                     <div className="slot">
@@ -258,15 +274,15 @@ export default function VisitsTab() {
                         <span className="t">
                           {fmtTime(s.start_time)} – {fmtTime(s.end_time)}
                         </span>{" "}
-                        {s.booked_by ? (
+                        {booked ? (
                           <span className="badge booked">
-                            {mine ? "You" : s.booker?.display_name ?? "Booked"}
+                            {mine ? "You" : s.booker?.display_name ?? s.booked_name ?? "Booked"}
                           </span>
                         ) : (
                           <span className="badge">Free</span>
                         )}
                       </div>
-                      {!s.booked_by &&
+                      {!booked &&
                         (isParent ? (
                           <button
                             className="ghost"
@@ -281,12 +297,12 @@ export default function VisitsTab() {
                             Book
                           </button>
                         ))}
-                      {s.booked_by && mine && (
+                      {mine && (
                         <button className="ghost" onClick={() => toggleBooking(s)}>
                           Cancel
                         </button>
                       )}
-                      {s.booked_by && !mine && isParent && (
+                      {booked && !mine && isParent && (
                         <button className="ghost" onClick={() => unbook(s)}>
                           Unbook
                         </button>
@@ -301,7 +317,7 @@ export default function VisitsTab() {
                         </button>
                       )}
                     </div>
-                    {isParent && bookingFor === s.id && !s.booked_by && (
+                    {isParent && bookingFor === s.id && !booked && (
                       <div className="linkslots">
                         <span className="muted">Who&apos;s coming?</span>
                         {members.map((m) => (
@@ -313,6 +329,25 @@ export default function VisitsTab() {
                             {m.id === profile.id ? "Me" : m.display_name}
                           </button>
                         ))}
+                        <form
+                          className="row"
+                          style={{ flexBasis: "100%", marginTop: 4 }}
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            bookGuestIn(s);
+                          }}
+                        >
+                          <input
+                            type="text"
+                            value={guestName}
+                            onChange={(e) => setGuestName(e.target.value)}
+                            placeholder="…or type a name (a friend, etc.)"
+                            aria-label="Guest name"
+                          />
+                          <button className="ghost" style={{ flex: "0 0 auto" }} type="submit">
+                            Book
+                          </button>
+                        </form>
                         <button className="tiny" onClick={() => setBookingFor(null)}>
                           not now
                         </button>
