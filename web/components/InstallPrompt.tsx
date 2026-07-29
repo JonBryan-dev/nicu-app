@@ -105,6 +105,12 @@ export default function InstallPrompt() {
               Not now
             </button>
           </div>
+          <p className="muted" style={{ marginTop: 8 }}>
+            If Android shows a &ldquo;Play Protect / unsafe app&rdquo; warning,
+            it&apos;s a false alarm on Google&apos;s installer — tap{" "}
+            <b>More details → Install anyway</b>. Or just skip it: updates and
+            notifications work fine right here in your browser too.
+          </p>
         </>
       )}
     </div>

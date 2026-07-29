@@ -216,6 +216,18 @@ function JoinInner() {
                 {busy ? "One sec…" : "Join"}
               </button>
             </div>
+            <div style={{ marginTop: 12, textAlign: "center" }}>
+              <button
+                type="button"
+                className="tiny"
+                onClick={() => {
+                  setErr("");
+                  setMode("existing");
+                }}
+              >
+                Already have an account? Log in
+              </button>
+            </div>
             {err && <p className="err">{err}</p>}
           </form>
         )}
@@ -250,10 +262,20 @@ function JoinInner() {
         {mode === "existing" && (
           <form onSubmit={submitExisting}>
             <p className="note" style={{ textAlign: "center" }}>
-              Looks like you already have an account — enter your password to
-              continue.
+              Log in with your email and password and we&apos;ll pop you into
+              this family.
             </p>
-            <label htmlFor="j-pw2">Password for {email.trim()}</label>
+            <label htmlFor="j-email2">Your email</label>
+            <input
+              id="j-email2"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+            />
+            <label htmlFor="j-pw2">Password</label>
             <input
               id="j-pw2"
               type="password"
@@ -264,7 +286,19 @@ function JoinInner() {
             />
             <div style={{ marginTop: 16, textAlign: "center" }}>
               <button className="primary" type="submit" disabled={busy}>
-                {busy ? "One sec…" : "Continue"}
+                {busy ? "One sec…" : "Log in & join"}
+              </button>
+            </div>
+            <div style={{ marginTop: 12, textAlign: "center" }}>
+              <button
+                type="button"
+                className="tiny"
+                onClick={() => {
+                  setErr("");
+                  setMode("details");
+                }}
+              >
+                New here? Create an account
               </button>
             </div>
             {err && <p className="err">{err}</p>}
