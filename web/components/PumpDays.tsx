@@ -87,12 +87,18 @@ export default function PumpDays({
         cum += s.ml;
         pts.push({ t: s.t, cum });
       }
-      lines.push({ key, pts, total: cum, count: sess.length, label: dayLabel(key, todayKey, yestKey) });
+      lines.push({ key, pts, total: cum, count: sess.length, label: dayLabel(key, todayKey, yestKey), isToday: key === todayKey });
     }
-    return lines;
+    // typical full day = mean of the completed days (today's still in progress)
+    const completed = lines.filter((l) => !l.isToday);
+    const base = completed.length ? completed : lines;
+    const avgTotal = Math.round(base.reduce((a, l) => a + l.total, 0) / base.length);
+    const nowHour = now.getHours() + now.getMinutes() / 60;
+    const hasToday = lines.some((l) => l.isToday);
+    return { lines, avgTotal, nowHour, hasToday };
   }, [byDay]);
 
-  if (model.length < 2) {
+  if (model.lines.length < 2) {
     return (
       <div className="card">
         <h2>Day by day</h2>
@@ -101,8 +107,9 @@ export default function PumpDays({
     );
   }
 
+  const { lines, avgTotal, nowHour, hasToday } = model;
   const W = 320, H = 150, padL = 6, padR = 6, padTop = 10, padBot = 18;
-  const maxY = Math.max(...model.map((l) => l.total), 1) * 1.08;
+  const maxY = Math.max(...lines.map((l) => l.total), avgTotal, 1) * 1.08;
   const x = (t: number) => padL + (t / 24) * (W - padL - padR);
   const y = (v: number) => H - padBot - (v / maxY) * (H - padTop - padBot);
   const path = (pts: { t: number; cum: number }[]) =>
@@ -117,7 +124,7 @@ export default function PumpDays({
       </p>
 
       <div className="pumpdays-legend">
-        {model.map((l, i) => (
+        {lines.map((l, i) => (
           <span key={l.key} className="pumpdays-key">
             <span className="pumpdays-swatch" style={{ background: colour(i) }} />
             {l.label} · <b>{l.total} ml</b> <span className="muted">({l.count})</span>
@@ -134,26 +141,35 @@ export default function PumpDays({
           </g>
         ))}
         <line x1={padL} y1={H - padBot} x2={W - padR} y2={H - padBot} stroke="var(--line, #0002)" strokeWidth="1" />
+        {/* typical full-day total — is today tracking above or below? */}
+        <line x1={padL} y1={y(avgTotal)} x2={W - padR} y2={y(avgTotal)} stroke="var(--ink-soft)" strokeWidth="1" strokeDasharray="3 3" opacity="0.55" />
+        <text x={padL + 2} y={y(avgTotal) - 4} textAnchor="start" fontSize="9" fill="var(--ink-soft)">{`typical ~${avgTotal} ml`}</text>
+        {/* "now" — how far through today we are */}
+        {hasToday && nowHour > 0.3 && (
+          <>
+            <line x1={x(nowHour)} y1={padTop} x2={x(nowHour)} y2={H - padBot} stroke={PALETTE[0]} strokeWidth="1" strokeDasharray="2 3" opacity="0.5" />
+            <text x={Math.min(x(nowHour), W - padR - 14)} y={padTop + 7} textAnchor="middle" fontSize="9" fill={PALETTE[0]}>now</text>
+          </>
+        )}
         {/* oldest first so today draws on top */}
-        {model.slice().reverse().map((l) => {
-          const i = model.indexOf(l);
-          const isToday = i === 0;
+        {lines.slice().reverse().map((l) => {
+          const i = lines.indexOf(l);
           return (
             <path
               key={l.key}
               d={path(l.pts)}
               fill="none"
               stroke={colour(i)}
-              strokeWidth={isToday ? 3 : 2}
+              strokeWidth={l.isToday ? 3 : 2}
               strokeLinejoin="round"
               strokeLinecap="round"
-              opacity={isToday ? 1 : 0.85}
+              opacity={l.isToday ? 1 : 0.85}
             />
           );
         })}
         {/* endpoint dots */}
-        {model.map((l, i) => (
-          <circle key={l.key} cx={x(l.pts[l.pts.length - 1].t)} cy={y(l.total)} r={i === 0 ? 3 : 2.4} fill={colour(i)} />
+        {lines.map((l, i) => (
+          <circle key={l.key} cx={x(l.pts[l.pts.length - 1].t)} cy={y(l.total)} r={l.isToday ? 3 : 2.4} fill={colour(i)} />
         ))}
       </svg>
     </div>
