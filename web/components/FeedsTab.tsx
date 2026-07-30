@@ -19,6 +19,7 @@ import {
 } from "@/lib/feedSchedule";
 import { todayKey, dayNumber } from "@/lib/dates";
 import PowerPump from "@/components/PowerPump";
+import PumpHistory from "@/components/PumpHistory";
 
 type FeedRecord = {
   id: string;
@@ -549,6 +550,8 @@ export default function FeedsTab() {
           Guidance here follows published NICU lactation targets — any change to your plan is still a decision with your unit.
         </p>
       </div>
+
+      <PumpHistory supabase={supabase} familyId={family.id} />
 
       {/* plan & sleep settings */}
       <div className="card">
