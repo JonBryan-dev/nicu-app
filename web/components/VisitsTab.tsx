@@ -15,6 +15,7 @@ export default function VisitsTab() {
   const [to, setTo] = useState("");
   const [repeat, setRepeat] = useState<"none" | "daily" | "weekdays" | "weekends">("none");
   const [until, setUntil] = useState("");
+  const [spaces, setSpaces] = useState(1);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [members, setMembers] = useState<Profile[]>([]);
@@ -90,14 +91,16 @@ export default function VisitsTab() {
       }
     }
 
-    const { error } = await supabase.from("visit_slots").insert(
-      dates.map((slot_date) => ({
+    // one row per space, per date — a "space" is a bookable spot at that time
+    const rows = dates.flatMap((slot_date) =>
+      Array.from({ length: spaces }, () => ({
         family_id: family.id,
         slot_date,
         start_time: from,
         end_time: to,
       }))
     );
+    const { error } = await supabase.from("visit_slots").insert(rows);
     if (error) {
       setErr(
         error.message.includes("end_time")
@@ -106,12 +109,14 @@ export default function VisitsTab() {
       );
       return;
     }
-    setMsg(dates.length > 1 ? `Opened ${dates.length} slots.` : "Slot opened.");
+    const spaceNote = spaces > 1 ? ` (${spaces} spaces each)` : "";
+    setMsg(dates.length > 1 ? `Opened ${dates.length} slots${spaceNote}.` : `Slot opened${spaceNote}.`);
     setDate("");
     setFrom("");
     setTo("");
     setRepeat("none");
     setUntil("");
+    setSpaces(1);
     load();
   }
 
@@ -165,11 +170,31 @@ export default function VisitsTab() {
     load();
   }
 
-  const grouped: { date: string; slots: VisitSlot[] }[] = [];
+  // delete every space at a time
+  async function removeGroup(groupSlots: VisitSlot[]) {
+    await supabase
+      .from("visit_slots")
+      .delete()
+      .in("id", groupSlots.map((s) => s.id));
+    load();
+  }
+
+  const slotBadge = (s: VisitSlot) =>
+    s.booked_by === profile.id ? "You" : s.booker?.display_name ?? s.booked_name ?? "Booked";
+
+  // group by date, then by time — each time-group is one visiting window with
+  // one-or-more bookable spaces
+  const grouped: { date: string; groups: { key: string; slots: VisitSlot[] }[] }[] = [];
   for (const s of slots ?? []) {
-    const g = grouped.find((x) => x.date === s.slot_date);
-    if (g) g.slots.push(s);
-    else grouped.push({ date: s.slot_date, slots: [s] });
+    let day = grouped.find((x) => x.date === s.slot_date);
+    if (!day) {
+      day = { date: s.slot_date, groups: [] };
+      grouped.push(day);
+    }
+    const key = `${s.start_time}-${s.end_time}`;
+    const grp = day.groups.find((g) => g.key === key);
+    if (grp) grp.slots.push(s);
+    else day.groups.push({ key, slots: [s] });
   }
 
   return (
@@ -240,6 +265,18 @@ export default function VisitsTab() {
                 />
               </div>
             )}
+            <div>
+              <label htmlFor="vs-spaces">Spaces</label>
+              <select
+                id="vs-spaces"
+                value={spaces}
+                onChange={(e) => setSpaces(+e.target.value)}
+              >
+                <option value={1}>1 person</option>
+                <option value={2}>2 people</option>
+                <option value={3}>3 people</option>
+              </select>
+            </div>
           </div>
           <div style={{ marginTop: 12 }}>
             <button className="primary" type="submit">
@@ -255,76 +292,90 @@ export default function VisitsTab() {
         <h2>Visiting slots</h2>
         {!isParent && (
           <p className="note">
-            Pick a free slot and it&apos;s yours — one household per slot.
+            Pick a free space and it&apos;s yours. Some slots fit more than one
+            of you.
           </p>
         )}
         {slots === null ? null : slots.length === 0 ? (
           <div className="empty">No slots open yet — check back soon.</div>
         ) : (
-          grouped.map((g) => (
-            <div key={g.date}>
-              <div className="datehead">{fmtDate(g.date)}</div>
-              {g.slots.map((s) => {
-                const mine = s.booked_by === profile.id;
-                const booked = !!s.booked_by || !!s.booked_name;
+          grouped.map((day) => (
+            <div key={day.date}>
+              <div className="datehead">{fmtDate(day.date)}</div>
+              {day.groups.map((grp) => {
+                const capacity = grp.slots.length;
+                const bookedSlots = grp.slots.filter((s) => s.booked_by || s.booked_name);
+                const freeSlots = grp.slots.filter((s) => !s.booked_by && !s.booked_name);
+                const mySlot = grp.slots.find((s) => s.booked_by === profile.id);
+                const first = grp.slots[0];
                 return (
-                  <div key={s.id}>
+                  <div key={grp.key}>
                     <div className="slot">
                       <div style={{ flex: 1 }}>
                         <span className="t">
-                          {fmtTime(s.start_time)} – {fmtTime(s.end_time)}
+                          {fmtTime(first.start_time)} – {fmtTime(first.end_time)}
                         </span>{" "}
-                        {booked ? (
-                          <span className="badge booked">
-                            {mine ? "You" : s.booker?.display_name ?? s.booked_name ?? "Booked"}
+                        {bookedSlots.map((s) => (
+                          <span key={s.id} className="badge booked" style={{ marginRight: 4 }}>
+                            {slotBadge(s)}
+                            {isParent && (
+                              <button
+                                className="badge-x"
+                                onClick={() => unbook(s)}
+                                aria-label={`Unbook ${slotBadge(s)}`}
+                              >
+                                ✕
+                              </button>
+                            )}
                           </span>
-                        ) : (
-                          <span className="badge">Free</span>
+                        ))}
+                        {freeSlots.length > 0 && (
+                          <span className="badge">
+                            {freeSlots.length} free{capacity > 1 ? ` of ${capacity}` : ""}
+                          </span>
+                        )}
+                        {freeSlots.length === 0 && capacity > 1 && (
+                          <span className="badge">full</span>
                         )}
                       </div>
-                      {!booked &&
+                      {freeSlots.length > 0 &&
                         (isParent ? (
                           <button
                             className="ghost"
                             onClick={() =>
-                              setBookingFor(bookingFor === s.id ? null : s.id)
+                              setBookingFor(bookingFor === grp.key ? null : grp.key)
                             }
                           >
                             Book…
                           </button>
-                        ) : (
-                          <button className="ghost" onClick={() => toggleBooking(s)}>
+                        ) : !mySlot ? (
+                          <button className="ghost" onClick={() => toggleBooking(freeSlots[0])}>
                             Book
                           </button>
-                        ))}
-                      {mine && (
-                        <button className="ghost" onClick={() => toggleBooking(s)}>
+                        ) : null)}
+                      {mySlot && (
+                        <button className="ghost" onClick={() => toggleBooking(mySlot)}>
                           Cancel
-                        </button>
-                      )}
-                      {booked && !mine && isParent && (
-                        <button className="ghost" onClick={() => unbook(s)}>
-                          Unbook
                         </button>
                       )}
                       {isParent && (
                         <button
                           className="tiny"
-                          onClick={() => removeSlot(s)}
-                          aria-label="Delete slot"
+                          onClick={() => removeGroup(grp.slots)}
+                          aria-label="Delete this slot"
                         >
                           ✕
                         </button>
                       )}
                     </div>
-                    {isParent && bookingFor === s.id && !booked && (
+                    {isParent && bookingFor === grp.key && freeSlots.length > 0 && (
                       <div className="linkslots">
                         <span className="muted">Who&apos;s coming?</span>
                         {members.map((m) => (
                           <button
                             key={m.id}
                             className="ghost"
-                            onClick={() => bookMemberIn(s, m.id)}
+                            onClick={() => bookMemberIn(freeSlots[0], m.id)}
                           >
                             {m.id === profile.id ? "Me" : m.display_name}
                           </button>
@@ -334,7 +385,7 @@ export default function VisitsTab() {
                           style={{ flexBasis: "100%", marginTop: 4 }}
                           onSubmit={(e) => {
                             e.preventDefault();
-                            bookGuestIn(s);
+                            bookGuestIn(freeSlots[0]);
                           }}
                         >
                           <input

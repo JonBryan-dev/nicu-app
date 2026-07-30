@@ -392,6 +392,16 @@ label {
   background: var(--sage);
   color: var(--on-accent);
 }
+.badge .badge-x {
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0 0 0 5px;
+  margin: 0;
+}
 /* shift grid */
 .shift {
   width: 100%;
