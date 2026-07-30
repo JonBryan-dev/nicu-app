@@ -430,6 +430,26 @@ label {
   color: var(--ink-soft);
   line-height: 1.25;
 }
+/* day-by-day overlay legend */
+.pumpdays-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 4px 0 10px;
+}
+.pumpdays-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+.pumpdays-swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
 /* shift grid */
 .shift {
   width: 100%;

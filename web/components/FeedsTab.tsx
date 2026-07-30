@@ -20,6 +20,7 @@ import {
 import { todayKey, dayNumber } from "@/lib/dates";
 import PowerPump from "@/components/PowerPump";
 import PumpHistory from "@/components/PumpHistory";
+import PumpDays from "@/components/PumpDays";
 
 type FeedRecord = {
   id: string;
@@ -552,6 +553,8 @@ export default function FeedsTab() {
       </div>
 
       <PumpHistory supabase={supabase} familyId={family.id} />
+
+      <PumpDays supabase={supabase} familyId={family.id} />
 
       {/* plan & sleep settings */}
       <div className="card">
