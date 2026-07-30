@@ -402,6 +402,34 @@ label {
   padding: 0 0 0 5px;
   margin: 0;
 }
+/* pumping-history stat chips */
+.pumpstats {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+.pumpstat {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--mist);
+  border-radius: 12px;
+}
+.pumpstat-n {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.pumpstat-l {
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+  line-height: 1.25;
+}
 /* shift grid */
 .shift {
   width: 100%;
