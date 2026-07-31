@@ -15,9 +15,10 @@ export default function VisitsTab() {
   const [to, setTo] = useState("");
   const [repeat, setRepeat] = useState<"none" | "daily" | "weekdays" | "weekends">("none");
   const [until, setUntil] = useState("");
-  const [spaces, setSpaces] = useState(1);
+  const [spaces, setSpaces] = useState(3);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
+  const [notice, setNotice] = useState("");
   const [members, setMembers] = useState<Profile[]>([]);
   const [bookingFor, setBookingFor] = useState<string | null>(null); // slot id with picker open
   const [guestName, setGuestName] = useState("");
@@ -120,37 +121,67 @@ export default function VisitsTab() {
     load();
   }
 
+  // "that space just filled" — shown when a booking loses a race with another
+  // phone (or a stale view), so nobody's booking silently gets overwritten
+  const TAKEN = "That space was just taken by someone else — showing the latest.";
+
   async function toggleBooking(slot: VisitSlot) {
+    setNotice("");
     const mine = slot.booked_by === profile.id;
     if (slot.booked_by && !mine) return;
-    const { error } = await supabase
+    if (mine) {
+      const { error } = await supabase
+        .from("visit_slots")
+        .update({ booked_by: null })
+        .eq("id", slot.id);
+      if (error) alert(error.message);
+      load();
+      return;
+    }
+    // book a free space — only if it is *still* free in the database, so two
+    // people (or a stale screen) can't overwrite each other's booking
+    const { data, error } = await supabase
       .from("visit_slots")
-      .update({ booked_by: mine ? null : profile.id })
-      .eq("id", slot.id);
+      .update({ booked_by: profile.id })
+      .eq("id", slot.id)
+      .is("booked_by", null)
+      .is("booked_name", null)
+      .select("id");
     if (error) alert(error.message);
+    else if (!data || data.length === 0) setNotice(TAKEN);
     load();
   }
 
   // parents only: book a chosen family member into a free slot
   async function bookMemberIn(slot: VisitSlot, memberId: string) {
-    const { error } = await supabase
+    setNotice("");
+    const { data, error } = await supabase
       .from("visit_slots")
       .update({ booked_by: memberId, booked_name: null })
-      .eq("id", slot.id);
+      .eq("id", slot.id)
+      .is("booked_by", null)
+      .is("booked_name", null)
+      .select("id");
     if (error) alert(error.message);
+    else if (!data || data.length === 0) setNotice(TAKEN);
     setBookingFor(null);
     load();
   }
 
   // parents only: book a non-member visitor by name
   async function bookGuestIn(slot: VisitSlot) {
+    setNotice("");
     const name = guestName.trim();
     if (!name) return;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("visit_slots")
       .update({ booked_name: name, booked_by: null })
-      .eq("id", slot.id);
+      .eq("id", slot.id)
+      .is("booked_by", null)
+      .is("booked_name", null)
+      .select("id");
     if (error) alert(error.message);
+    else if (!data || data.length === 0) setNotice(TAKEN);
     setBookingFor(null);
     setGuestName("");
     load();
@@ -294,6 +325,11 @@ export default function VisitsTab() {
           <p className="note">
             Pick a free space and it&apos;s yours. Some slots fit more than one
             of you.
+          </p>
+        )}
+        {notice && (
+          <p className="note" role="status" style={{ borderColor: "var(--rose)" }}>
+            {notice}
           </p>
         )}
         {slots === null ? null : slots.length === 0 ? (

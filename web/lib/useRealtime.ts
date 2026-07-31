@@ -38,10 +38,17 @@ export function useRealtime(
     };
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
+    // safety net: if the socket has silently died (common on mobile), a plain
+    // refetch every 30s while the tab is visible keeps two phones in sync even
+    // when realtime events stop arriving. Cheap query, never runs in background.
+    const poll = setInterval(() => {
+      if (document.visibilityState === "visible") cb.current();
+    }, 30_000);
     return () => {
       supabase.removeChannel(channel);
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
+      clearInterval(poll);
     };
   }, [supabase, table, familyId, instanceId]);
 }
