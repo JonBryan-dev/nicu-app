@@ -48,6 +48,13 @@ export function fmtDate(dateStr: string): string {
   return `${WDAYS[date.getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
 }
 
+/** 'Mon'..'Sun' for a 'YYYY-MM-DD' string — matches shift_blocks.day_name. */
+export function dayName(dateStr: string): "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun" {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return WDAYS[date.getUTCDay()] as "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun";
+}
+
 /** '24 Jul · 14:05' from a timestamp, in the viewer's local time. */
 export function fmtStamp(ts: string): string {
   const d = new Date(ts);

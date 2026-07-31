@@ -4,8 +4,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useFamily } from "@/components/FamilyProvider";
 import { useRealtime } from "@/lib/useRealtime";
-import { todayKey, fmtDate, fmtTime } from "@/lib/dates";
-import type { Profile, VisitSlot } from "@/lib/types";
+import { todayKey, fmtDate, fmtTime, isoWeekKey, dayName } from "@/lib/dates";
+import { daySummary } from "@/lib/presence";
+import { BLOCKS, type Profile, type VisitSlot, type ShiftAssignee, type ShiftBlock } from "@/lib/types";
 
 export default function VisitsTab() {
   const { supabase, profile, family, isParent } = useFamily();
@@ -22,6 +23,7 @@ export default function VisitsTab() {
   const [members, setMembers] = useState<Profile[]>([]);
   const [bookingFor, setBookingFor] = useState<string | null>(null); // slot id with picker open
   const [guestName, setGuestName] = useState("");
+  const [rota, setRota] = useState<Record<string, ShiftAssignee>>({});
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -38,6 +40,37 @@ export default function VisitsTab() {
     load();
   }, [load]);
   useRealtime(supabase, "visit_slots", family.id, load);
+
+  // who's at the hospital each day, from the Rest rota (family can read it too)
+  const loadRota = useCallback(async () => {
+    const weeks = Array.from(new Set((slots ?? []).map((s) => isoWeekKey(s.slot_date))));
+    if (!weeks.length) {
+      setRota({});
+      return;
+    }
+    const { data } = await supabase
+      .from("shift_blocks")
+      .select("week_key, day_name, block_name, assignee")
+      .eq("family_id", family.id)
+      .in("week_key", weeks);
+    const map: Record<string, ShiftAssignee> = {};
+    for (const r of (data as ShiftBlock[]) ?? [])
+      map[`${r.week_key}-${r.day_name}-${r.block_name}`] = r.assignee;
+    setRota(map);
+  }, [supabase, family.id, slots]);
+  useEffect(() => {
+    loadRota();
+  }, [loadRota]);
+  useRealtime(supabase, "shift_blocks", family.id, loadRota);
+
+  // aggregate a day's AM/PM/Eve blocks into "who's here"; null until the
+  // week's rota has been set, so it never over-claims
+  const dayPresence = (dateStr: string) => {
+    const wk = isoWeekKey(dateStr);
+    if (!Object.keys(rota).some((k) => k.startsWith(`${wk}-`))) return null;
+    const dn = dayName(dateStr);
+    return daySummary(BLOCKS.map((b) => rota[`${wk}-${dn}-${b}`] ?? "both"));
+  };
 
   // parents can book someone in — load the family list for the picker
   useEffect(() => {
@@ -337,7 +370,15 @@ export default function VisitsTab() {
         ) : (
           grouped.map((day) => (
             <div key={day.date}>
-              <div className="datehead">{fmtDate(day.date)}</div>
+              <div className="datehead">
+                <span className="datehead-d">{fmtDate(day.date)}</span>
+                {(() => {
+                  const p = dayPresence(day.date);
+                  return p ? (
+                    <span className={`presence-tag presence-${p.kind}`}>{p.label}</span>
+                  ) : null;
+                })()}
+              </div>
               {day.groups.map((grp) => {
                 const capacity = grp.slots.length;
                 const bookedSlots = grp.slots.filter((s) => s.booked_by || s.booked_name);

@@ -9,6 +9,7 @@ import type { Profile } from "@/lib/types";
 import PushPrompt from "@/components/PushPrompt";
 import InstallPrompt from "@/components/InstallPrompt";
 import ThemePicker from "@/components/ThemePicker";
+import ParentPresence from "@/components/ParentPresence";
 
 function InviteShare({ code, baby }: { code?: string; baby: string }) {
   const [copied, setCopied] = useState(false);
@@ -81,9 +82,25 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }
 
   // iOS: while the keyboard is up, Safari detaches fixed elements from the
-  // visual viewport — hide the bottom bar during typing so it can't float
-  // mid-screen (and typing gets the room back)
+  // visual viewport, so the bottom bar can float mid-screen. Detect the
+  // keyboard by the visual-viewport shrinking (far more reliable than focus
+  // events, which can stick) and hide the bar while it's up. Falls back to
+  // focus events on the rare browser without visualViewport.
   useEffect(() => {
+    const vv = window.visualViewport;
+    if (vv) {
+      const update = () => {
+        // keyboard up when the visible viewport is well short of the layout
+        const kbUp = window.innerHeight - vv.height > 140;
+        document.body.classList.toggle("kb-open", kbUp);
+      };
+      vv.addEventListener("resize", update);
+      update();
+      return () => {
+        vv.removeEventListener("resize", update);
+        document.body.classList.remove("kb-open");
+      };
+    }
     const isField = (el: Element | null) =>
       !!el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
     const onFocus = (e: FocusEvent) => {
@@ -91,9 +108,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     };
     const onBlur = () => {
       setTimeout(() => {
-        if (!isField(document.activeElement)) {
-          document.body.classList.remove("kb-open");
-        }
+        if (!isField(document.activeElement)) document.body.classList.remove("kb-open");
       }, 60);
     };
     window.addEventListener("focusin", onFocus);
@@ -164,6 +179,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <button onClick={signOut}>sign out</button>
         </div>
       </div>
+
+      <ParentPresence />
 
       {showTheme && <ThemePicker />}
 

@@ -374,11 +374,60 @@ label {
 }
 .datehead {
   font-family: var(--font-fraunces), Georgia, serif;
-  font-weight: 600;
-  font-size: 0.95rem;
-  margin: 14px 0 2px;
+  font-weight: 700;
+  font-size: 1.18rem;
+  margin: 20px 0 6px;
+  padding-bottom: 5px;
   color: var(--rose-deep);
+  border-bottom: 1px solid var(--mist);
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
 }
+.datehead-d {
+  flex: 1 1 auto;
+}
+/* who's-here tag on a visiting day (and the top-of-app banner) */
+.presence-tag {
+  font-family: var(--font-nunito), sans-serif;
+  font-weight: 700;
+  font-size: 0.68rem;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: var(--on-accent);
+  white-space: nowrap;
+}
+.presence {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--mist);
+}
+.presence-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+/* rota colours — match the Rest-tab legend */
+.presence-both .presence-dot,
+.presence-tag.presence-both { background: var(--rose-deep); }
+.presence-mum .presence-dot,
+.presence-tag.presence-mum { background: var(--rose); }
+.presence-dad .presence-dot,
+.presence-tag.presence-dad { background: var(--sky); }
+.presence-family .presence-dot,
+.presence-tag.presence-family { background: var(--sage); }
+.presence-rest .presence-dot,
+.presence-tag.presence-rest { background: var(--ink-soft); }
 .badge {
   display: inline-block;
   background: var(--mist);
@@ -939,6 +988,8 @@ select {
     box-shadow: 0 -2px 12px rgba(46, 42, 51, 0.06);
     /* own compositor layer: stops the bar lagging behind iOS scroll */
     transform: translateZ(0);
+    will-change: transform;
+    backface-visibility: hidden;
   }
   /* keyboard open: hide the bar so iOS can't float it mid-screen */
   body.kb-open .tabs {
