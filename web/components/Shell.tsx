@@ -10,6 +10,7 @@ import PushPrompt from "@/components/PushPrompt";
 import InstallPrompt from "@/components/InstallPrompt";
 import ThemePicker from "@/components/ThemePicker";
 import ParentPresence from "@/components/ParentPresence";
+import PowerPumpProvider from "@/components/PowerPumpProvider";
 
 function InviteShare({ code, baby }: { code?: string; baby: string }) {
   const [copied, setCopied] = useState(false);
@@ -160,6 +161,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <PowerPumpProvider>
     <div className="wrap">
       <div className="hero">
         <div className="baby">{family.baby_name}</div>
@@ -337,5 +339,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
       {children}
     </div>
+    </PowerPumpProvider>
   );
 }
