@@ -87,35 +87,27 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   // events, which can stick) and hide the bar while it's up. Falls back to
   // focus events on the rare browser without visualViewport.
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (vv) {
-      const update = () => {
-        // keyboard up when the visible viewport is well short of the layout
-        const kbUp = window.innerHeight - vv.height > 140;
-        document.body.classList.toggle("kb-open", kbUp);
-      };
-      vv.addEventListener("resize", update);
-      update();
-      return () => {
-        vv.removeEventListener("resize", update);
-        document.body.classList.remove("kb-open");
-      };
-    }
+    // Hide the bottom bar ONLY while a text field is focused AND the keyboard
+    // has actually shrunk the viewport. Requiring a focused field means plain
+    // scrolling or the iOS URL-bar collapsing can never make the bar vanish
+    // (that regression is what "the menu keeps disappearing" was).
     const isField = (el: Element | null) =>
-      !!el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
-    const onFocus = (e: FocusEvent) => {
-      if (isField(e.target as Element)) document.body.classList.add("kb-open");
+      !!el && /^(INPUT|TEXTAREA)$/.test(el.tagName);
+    const vv = window.visualViewport;
+    const sync = () => {
+      const focused = isField(document.activeElement);
+      const shrunk = vv ? window.innerHeight - vv.height > 120 : true;
+      document.body.classList.toggle("kb-open", focused && shrunk);
     };
-    const onBlur = () => {
-      setTimeout(() => {
-        if (!isField(document.activeElement)) document.body.classList.remove("kb-open");
-      }, 60);
-    };
-    window.addEventListener("focusin", onFocus);
+    const onBlur = () => setTimeout(sync, 60);
+    window.addEventListener("focusin", sync);
     window.addEventListener("focusout", onBlur);
+    vv?.addEventListener("resize", sync);
     return () => {
-      window.removeEventListener("focusin", onFocus);
+      window.removeEventListener("focusin", sync);
       window.removeEventListener("focusout", onBlur);
+      vv?.removeEventListener("resize", sync);
+      document.body.classList.remove("kb-open");
     };
   }, []);
 

@@ -388,16 +388,26 @@ label {
 .datehead-d {
   flex: 1 1 auto;
 }
-/* who's-here tag on a visiting day (and the top-of-app banner) */
-.presence-tag {
+/* who's-on per block on a visiting day — lines up with the rota grid */
+.daywho {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px 10px;
+  justify-content: flex-end;
+}
+.whoson {
   font-family: var(--font-nunito), sans-serif;
-  font-weight: 700;
-  font-size: 0.68rem;
-  padding: 2px 9px;
-  border-radius: 999px;
-  color: var(--on-accent);
+  font-weight: 800;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
+.whoson-both { color: var(--rose-deep); }
+.whoson-mum { color: var(--rose); }
+.whoson-dad { color: var(--sky); }
+.whoson-family { color: var(--sage); }
+.whoson-rest { color: var(--ink-soft); }
+/* top-of-app "who's here now" banner */
 .presence {
   display: flex;
   align-items: center;
@@ -417,17 +427,11 @@ label {
   border-radius: 999px;
   flex: 0 0 auto;
 }
-/* rota colours — match the Rest-tab legend */
-.presence-both .presence-dot,
-.presence-tag.presence-both { background: var(--rose-deep); }
-.presence-mum .presence-dot,
-.presence-tag.presence-mum { background: var(--rose); }
-.presence-dad .presence-dot,
-.presence-tag.presence-dad { background: var(--sky); }
-.presence-family .presence-dot,
-.presence-tag.presence-family { background: var(--sage); }
-.presence-rest .presence-dot,
-.presence-tag.presence-rest { background: var(--ink-soft); }
+.presence-both .presence-dot { background: var(--rose-deep); }
+.presence-mum .presence-dot { background: var(--rose); }
+.presence-dad .presence-dot { background: var(--sky); }
+.presence-family .presence-dot { background: var(--sage); }
+.presence-rest .presence-dot { background: var(--ink-soft); }
 .badge {
   display: inline-block;
   background: var(--mist);

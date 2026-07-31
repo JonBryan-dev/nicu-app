@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useFamily } from "@/components/FamilyProvider";
 import { useRealtime } from "@/lib/useRealtime";
 import { todayKey, fmtDate, fmtTime, isoWeekKey, dayName } from "@/lib/dates";
-import { daySummary } from "@/lib/presence";
+import { presenceFor } from "@/lib/presence";
 import { BLOCKS, type Profile, type VisitSlot, type ShiftAssignee, type ShiftBlock } from "@/lib/types";
 
 export default function VisitsTab() {
@@ -63,13 +63,13 @@ export default function VisitsTab() {
   }, [loadRota]);
   useRealtime(supabase, "shift_blocks", family.id, loadRota);
 
-  // aggregate a day's AM/PM/Eve blocks into "who's here"; null until the
-  // week's rota has been set, so it never over-claims
-  const dayPresence = (dateStr: string) => {
+  // who's on for each of a day's AM/PM/Eve blocks — lines up with the rota
+  // grid. null until the week's rota has been set, so it never over-claims.
+  const dayBlocks = (dateStr: string) => {
     const wk = isoWeekKey(dateStr);
     if (!Object.keys(rota).some((k) => k.startsWith(`${wk}-`))) return null;
     const dn = dayName(dateStr);
-    return daySummary(BLOCKS.map((b) => rota[`${wk}-${dn}-${b}`] ?? "both"));
+    return BLOCKS.map((b) => ({ block: b, who: presenceFor(rota[`${wk}-${dn}-${b}`] ?? "both") }));
   };
 
   // parents can book someone in — load the family list for the picker
@@ -373,9 +373,15 @@ export default function VisitsTab() {
               <div className="datehead">
                 <span className="datehead-d">{fmtDate(day.date)}</span>
                 {(() => {
-                  const p = dayPresence(day.date);
-                  return p ? (
-                    <span className={`presence-tag presence-${p.kind}`}>{p.label}</span>
+                  const blocks = dayBlocks(day.date);
+                  return blocks ? (
+                    <span className="daywho">
+                      {blocks.map(({ block, who }) => (
+                        <span key={block} className={`whoson whoson-${who.kind}`}>
+                          {block} {who.short}
+                        </span>
+                      ))}
+                    </span>
                   ) : null;
                 })()}
               </div>
