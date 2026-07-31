@@ -2,7 +2,7 @@
 // Shell — persistent hero (baby name, Day N, born line) + sticky pill tabs.
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFamily } from "@/components/FamilyProvider";
 import { dayNumber, fmtDate } from "@/lib/dates";
 import type { Profile } from "@/lib/types";
@@ -81,32 +81,43 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     if (id === profile.id) router.refresh();
   }
 
-  // iOS: while the keyboard is up, Safari detaches fixed elements from the
-  // visual viewport, so the bottom bar can float mid-screen. Detect the
-  // keyboard by the visual-viewport shrinking (far more reliable than focus
-  // events, which can stick) and hide the bar while it's up. Falls back to
-  // focus events on the rare browser without visualViewport.
+  const navRef = useRef<HTMLElement>(null);
+
+  // The bottom bar is fixed to the *layout* viewport, but iOS moves the
+  // *visible* viewport as the address bar shows/hides on scroll — so a plain
+  // fixed bar drifts. Re-pin it to the visible bottom on every viewport change,
+  // which also holds it steady during scroll. Separately, hide it only while a
+  // text field is genuinely focused (a real keyboard), never on scroll alone.
   useEffect(() => {
-    // Hide the bottom bar ONLY while a text field is focused AND the keyboard
-    // has actually shrunk the viewport. Requiring a focused field means plain
-    // scrolling or the iOS URL-bar collapsing can never make the bar vanish
-    // (that regression is what "the menu keeps disappearing" was).
+    const vv = window.visualViewport;
+    if (!vv) return;
     const isField = (el: Element | null) =>
       !!el && /^(INPUT|TEXTAREA)$/.test(el.tagName);
-    const vv = window.visualViewport;
     const sync = () => {
-      const focused = isField(document.activeElement);
-      const shrunk = vv ? window.innerHeight - vv.height > 120 : true;
-      document.body.classList.toggle("kb-open", focused && shrunk);
+      // keyboard up → hide; otherwise pin to the visible viewport bottom
+      const kbUp = isField(document.activeElement) && window.innerHeight - vv.height > 120;
+      document.body.classList.toggle("kb-open", kbUp);
+      const nav = navRef.current;
+      if (nav) {
+        // only the mobile bar is fixed; leave the desktop sticky nav alone
+        const mobile = window.matchMedia("(max-width: 640px)").matches;
+        const offset = window.innerHeight - vv.height - vv.offsetTop;
+        // 0 in a standalone PWA (no address bar); corrects the drift in Safari
+        nav.style.transform = mobile ? `translate3d(0, ${(-offset).toFixed(1)}px, 0)` : "";
+      }
     };
     const onBlur = () => setTimeout(sync, 60);
     window.addEventListener("focusin", sync);
     window.addEventListener("focusout", onBlur);
-    vv?.addEventListener("resize", sync);
+    vv.addEventListener("resize", sync);
+    vv.addEventListener("scroll", sync);
+    sync();
     return () => {
       window.removeEventListener("focusin", sync);
       window.removeEventListener("focusout", onBlur);
-      vv?.removeEventListener("resize", sync);
+      vv.removeEventListener("resize", sync);
+      vv.removeEventListener("scroll", sync);
+      if (navRef.current) navRef.current.style.transform = "";
       document.body.classList.remove("kb-open");
     };
   }, []);
@@ -309,7 +320,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
       <PushPrompt />
 
-      <nav className="tabs" aria-label="Sections">
+      <nav className="tabs" aria-label="Sections" ref={navRef}>
         {TABS.filter((t) =>
           profile.role === "team" ? t.href === "/" : isParent || !t.parentOnly
         ).map((t) => (
