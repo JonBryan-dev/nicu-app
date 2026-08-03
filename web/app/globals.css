@@ -245,6 +245,42 @@ label {
   text-align: center;
   padding: 18px 6px;
 }
+/* Updates ⇄ private journal switch */
+.viewtabs {
+  display: flex;
+  gap: 4px;
+  background: var(--mist);
+  border-radius: 999px;
+  padding: 4px;
+  margin: 0 auto 16px;
+  max-width: 320px;
+}
+.viewtabs button {
+  flex: 1;
+  border: none;
+  background: none;
+  border-radius: 999px;
+  padding: 8px 10px;
+  font: 700 0.85rem var(--font-nunito), sans-serif;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.viewtabs button.on {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(46, 42, 51, 0.12);
+}
+/* the private journal reads a touch calmer than the family feed */
+.card.journal {
+  border: 1px solid var(--rose);
+}
+.card.journal h2 {
+  color: var(--rose-deep);
+}
+.post.journal-entry::before {
+  background: var(--rose);
+  border-color: var(--rose);
+}
 .thread {
   position: relative;
   padding-left: 26px;
