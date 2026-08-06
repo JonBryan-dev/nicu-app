@@ -21,12 +21,15 @@ import { todayKey, dayNumber } from "@/lib/dates";
 import { PowerPumpButton } from "@/components/PowerPumpProvider";
 import PumpHistory from "@/components/PumpHistory";
 import PumpDays from "@/components/PumpDays";
+import PumpLog from "@/components/PumpLog";
 
 type FeedRecord = {
   id: string;
   started_at: string;
   ended_at: string | null;
   ml: number | null;
+  ml_left: number | null;
+  ml_right: number | null;
   method: string;
 };
 
@@ -76,8 +79,12 @@ export default function FeedsTab() {
   const [editMl, setEditMl] = useState("");
   const [editMethod, setEditMethod] = useState("bottle");
   const [showPast, setShowPast] = useState(false);
+  const [pastDate, setPastDate] = useState(todayKey());
   const [pastTime, setPastTime] = useState("");
   const [pastMl, setPastMl] = useState("");
+  const [pastLeft, setPastLeft] = useState("");
+  const [pastRight, setPastRight] = useState("");
+  const [pastMins, setPastMins] = useState("");
   const [pastMethod, setPastMethod] = useState("pump");
   const [err, setErr] = useState("");
 
@@ -210,6 +217,11 @@ export default function FeedsTab() {
     return d.toISOString();
   }
 
+  // a specific calendar day + time (local) → ISO — for back-logging past days
+  function atOn(dateStr: string, hhmm: string): string {
+    return new Date(`${dateStr}T${hhmm}`).toISOString();
+  }
+
   async function startFeed() {
     setErr("");
     const { error } = await supabase.from("feeds").insert({
@@ -242,15 +254,23 @@ export default function FeedsTab() {
   async function logPastFeed(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
-    if (!pastTime) return;
-    const ml = pastMl ? parseInt(pastMl, 10) : null;
-    const at = todayAt(pastTime);
+    if (!pastDate || !pastTime) return;
+    const L = pastLeft.trim() ? parseInt(pastLeft, 10) : null;
+    const R = pastRight.trim() ? parseInt(pastRight, 10) : null;
+    const hasSplit = L != null || R != null;
+    // a left/right split sets the total; otherwise use the single amount
+    const ml = hasSplit ? (L ?? 0) + (R ?? 0) : pastMl.trim() ? parseInt(pastMl, 10) : null;
+    const at = atOn(pastDate, pastTime);
+    const mins = pastMins.trim() ? parseInt(pastMins, 10) : null;
+    const ended = mins && mins > 0 ? new Date(+new Date(at) + mins * 60000).toISOString() : at;
     const { error } = await supabase.from("feeds").insert({
       family_id: family.id,
       fed_by: profile.id,
       started_at: at,
-      ended_at: at,
+      ended_at: ended,
       ml,
+      ml_left: L,
+      ml_right: R,
       method: pastMethod,
     });
     if (error) {
@@ -258,8 +278,12 @@ export default function FeedsTab() {
       return;
     }
     setShowPast(false);
+    setPastDate(todayKey());
     setPastTime("");
     setPastMl("");
+    setPastLeft("");
+    setPastRight("");
+    setPastMins("");
     load();
   }
 
@@ -353,6 +377,10 @@ export default function FeedsTab() {
   const calUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/api/calendar/${family.calendar_token}`;
   const feedById = (id: string) => feeds.find((f) => f.id === id);
 
+  // when a left/right split is being entered, the total is derived and locked
+  const pastSplit = pastLeft.trim() !== "" || pastRight.trim() !== "";
+  const pastSplitTotal = (parseInt(pastLeft || "0", 10) || 0) + (parseInt(pastRight || "0", 10) || 0);
+
   return (
     <section>
       {/* baby's ward-set feeds */}
@@ -410,18 +438,49 @@ export default function FeedsTab() {
               <form onSubmit={logPastFeed} style={{ marginTop: 10 }}>
                 <div className="row wrap">
                   <div>
-                    <label htmlFor="pf-t">When (today)</label>
+                    <label htmlFor="pf-d">Day</label>
+                    <input id="pf-d" type="date" value={pastDate} max={todayKey()} onChange={(e) => setPastDate(e.target.value)} required />
+                  </div>
+                  <div>
+                    <label htmlFor="pf-t">Time</label>
                     <input id="pf-t" type="time" value={pastTime} onChange={(e) => setPastTime(e.target.value)} required />
                   </div>
                   <div>
-                    <label htmlFor="pf-ml">Amount (ml)</label>
-                    <input id="pf-ml" type="text" inputMode="numeric" value={pastMl} onChange={(e) => setPastMl(e.target.value)} placeholder="60" />
+                    <label htmlFor="pf-min">Minutes</label>
+                    <input id="pf-min" type="text" inputMode="numeric" value={pastMins} onChange={(e) => setPastMins(e.target.value)} placeholder="15" />
                   </div>
+                </div>
+                <div className="row wrap" style={{ marginTop: 10 }}>
+                  <div>
+                    <label htmlFor="pf-l">Left (ml)</label>
+                    <input id="pf-l" type="text" inputMode="numeric" value={pastLeft} onChange={(e) => setPastLeft(e.target.value)} placeholder="30" />
+                  </div>
+                  <div>
+                    <label htmlFor="pf-r">Right (ml)</label>
+                    <input id="pf-r" type="text" inputMode="numeric" value={pastRight} onChange={(e) => setPastRight(e.target.value)} placeholder="30" />
+                  </div>
+                  <div>
+                    <label htmlFor="pf-ml">{pastSplit ? "Total (ml)" : "Amount (ml)"}</label>
+                    <input
+                      id="pf-ml"
+                      type="text"
+                      inputMode="numeric"
+                      value={pastSplit ? String(pastSplitTotal) : pastMl}
+                      onChange={(e) => setPastMl(e.target.value)}
+                      disabled={pastSplit}
+                      placeholder="60"
+                    />
+                  </div>
+                </div>
+                <div className="row wrap" style={{ marginTop: 10 }}>
                   <div>
                     <label htmlFor="pf-m">How</label>
                     <MethodSelect id="pf-m" value={pastMethod} onChange={setPastMethod} />
                   </div>
                 </div>
+                <p className="muted" style={{ marginTop: 6 }}>
+                  Split left/right if you like — or just put the total in. Minutes is optional.
+                </p>
                 <button className="ghost" style={{ marginTop: 10 }} type="submit">Save</button>
               </form>
             )}
@@ -550,6 +609,8 @@ export default function FeedsTab() {
       <PumpHistory supabase={supabase} familyId={family.id} />
 
       <PumpDays supabase={supabase} familyId={family.id} />
+
+      <PumpLog supabase={supabase} familyId={family.id} />
 
       {/* plan & sleep settings */}
       <div className="card">

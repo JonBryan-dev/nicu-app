@@ -245,6 +245,58 @@ label {
   text-align: center;
   padding: 18px 6px;
 }
+/* pumping log — days that expand to their sessions */
+.logday {
+  border-top: 1px solid var(--mist);
+}
+.logday > summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 2px;
+  cursor: pointer;
+  list-style: none;
+}
+.logday > summary::-webkit-details-marker { display: none; }
+.logday > summary::before {
+  content: "▸";
+  color: var(--ink-soft);
+  margin-right: 6px;
+  font-size: 0.8rem;
+}
+.logday[open] > summary::before { content: "▾"; }
+.logday-date {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--rose-deep);
+  flex: 1 1 auto;
+}
+.logday-total {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+.loglist {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0 2px 4px 22px;
+}
+.loglist li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 0.9rem;
+  border-bottom: 1px dotted var(--mist);
+}
+.loglist li:last-child { border-bottom: none; }
+.logt { font-variant-numeric: tabular-nums; color: var(--ink-soft); min-width: 44px; }
+.logml { font-weight: 700; min-width: 54px; }
+.logside { font-size: 0.78rem; color: var(--sky); }
+.logmin { font-size: 0.78rem; color: var(--ink-soft); margin-left: auto; white-space: nowrap; }
 /* Updates ⇄ private journal switch */
 .viewtabs {
   display: flex;
