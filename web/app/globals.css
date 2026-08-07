@@ -245,60 +245,44 @@ label {
   text-align: center;
   padding: 18px 6px;
 }
-/* top-breast leaderboard */
-.breast-lb {
-  display: flex;
-  gap: 10px;
-}
-.breast-tile {
-  position: relative;
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
+/* breast performance — today / daily avg / total, left vs right */
+.breast-grid {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
   align-items: center;
-  gap: 2px;
-  padding: 16px 10px 12px;
-  border-radius: 14px;
-  background: var(--mist);
-  border: 2px solid transparent;
+  gap: 8px 10px;
 }
-.breast-tile.win {
-  background: color-mix(in srgb, var(--sage) 18%, var(--card));
-  border-color: var(--sage);
+.breast-grid > div {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  padding: 8px 6px;
+  border-radius: 10px;
 }
-.breast-sticker {
-  position: absolute;
-  top: -10px;
-  right: -6px;
-  transform: rotate(8deg);
-  background: var(--sage);
-  color: var(--on-accent);
-  font-size: 0.66rem;
+.breast-grid .bg-h {
   font-weight: 800;
-  padding: 3px 8px;
-  border-radius: 999px;
-  box-shadow: 0 2px 6px rgba(46, 42, 51, 0.2);
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  padding-bottom: 4px;
 }
-.breast-side {
+.breast-grid .bg-rl {
+  text-align: left;
   font-size: 0.78rem;
   font-weight: 700;
   color: var(--ink-soft);
 }
-.breast-avg {
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-size: 1.7rem;
-  font-weight: 600;
-  color: var(--ink);
-  line-height: 1.1;
+.breast-grid .win {
+  background: color-mix(in srgb, var(--sage) 16%, var(--card));
+  color: var(--sage);
+  font-weight: 800;
 }
-.breast-tot {
-  font-size: 0.7rem;
-  color: var(--ink-soft);
+.breast-grid .bg-h.win {
+  color: var(--sage);
+  background: none;
 }
 .breast-verdict {
   text-align: center;
   font-weight: 700;
-  margin: 12px 0 0;
+  margin: 14px 0 0;
   color: var(--rose-deep);
 }
 /* pumping log — days that expand to their sessions */
