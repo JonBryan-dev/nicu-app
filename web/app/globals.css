@@ -245,6 +245,62 @@ label {
   text-align: center;
   padding: 18px 6px;
 }
+/* top-breast leaderboard */
+.breast-lb {
+  display: flex;
+  gap: 10px;
+}
+.breast-tile {
+  position: relative;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 16px 10px 12px;
+  border-radius: 14px;
+  background: var(--mist);
+  border: 2px solid transparent;
+}
+.breast-tile.win {
+  background: color-mix(in srgb, var(--sage) 18%, var(--card));
+  border-color: var(--sage);
+}
+.breast-sticker {
+  position: absolute;
+  top: -10px;
+  right: -6px;
+  transform: rotate(8deg);
+  background: var(--sage);
+  color: var(--on-accent);
+  font-size: 0.66rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(46, 42, 51, 0.2);
+}
+.breast-side {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.breast-avg {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 1.7rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.1;
+}
+.breast-tot {
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+}
+.breast-verdict {
+  text-align: center;
+  font-weight: 700;
+  margin: 12px 0 0;
+  color: var(--rose-deep);
+}
 /* pumping log — days that expand to their sessions */
 .logday {
   border-top: 1px solid var(--mist);

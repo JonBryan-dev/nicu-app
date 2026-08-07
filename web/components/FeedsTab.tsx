@@ -22,6 +22,7 @@ import { PowerPumpButton } from "@/components/PowerPumpProvider";
 import PumpHistory from "@/components/PumpHistory";
 import PumpDays from "@/components/PumpDays";
 import PumpLog from "@/components/PumpLog";
+import TopBreast from "@/components/TopBreast";
 
 type FeedRecord = {
   id: string;
@@ -237,7 +238,7 @@ export default function FeedsTab() {
   async function finishFeed() {
     if (!openFeed) return;
     setErr("");
-    const ml = finishMl ? parseInt(finishMl, 10) : null;
+    const ml = finishMl ? parseFloat(finishMl) : null;
     if (ml !== null && (isNaN(ml) || ml < 0 || ml > 500)) {
       setErr("Millilitres should be a number like 40.");
       return;
@@ -259,7 +260,7 @@ export default function FeedsTab() {
     const R = pastRight.trim() ? parseInt(pastRight, 10) : null;
     const hasSplit = L != null || R != null;
     // a left/right split sets the total; otherwise use the single amount
-    const ml = hasSplit ? (L ?? 0) + (R ?? 0) : pastMl.trim() ? parseInt(pastMl, 10) : null;
+    const ml = hasSplit ? (L ?? 0) + (R ?? 0) : pastMl.trim() ? parseFloat(pastMl) : null;
     const at = atOn(pastDate, pastTime);
     const mins = pastMins.trim() ? parseInt(pastMins, 10) : null;
     const ended = mins && mins > 0 ? new Date(+new Date(at) + mins * 60000).toISOString() : at;
@@ -297,7 +298,7 @@ export default function FeedsTab() {
   async function saveEdit() {
     if (!editId) return;
     setErr("");
-    const ml = editMl ? parseInt(editMl, 10) : null;
+    const ml = editMl ? parseFloat(editMl) : null;
     const { error } = await supabase
       .from("feeds")
       .update({ started_at: todayAt(editTime), ml, method: editMethod })
@@ -315,7 +316,7 @@ export default function FeedsTab() {
 
   async function logExpressing(e: React.FormEvent) {
     e.preventDefault();
-    const ml = parseInt(exprMl, 10);
+    const ml = parseFloat(exprMl);
     if (isNaN(ml) || ml <= 0) return;
     await supabase.from("expressing_logs").insert({ family_id: family.id, logged_by: profile.id, ml });
     setExprMl("");
@@ -410,7 +411,7 @@ export default function FeedsTab() {
             <div className="row wrap" style={{ marginTop: 10 }}>
               <div>
                 <label htmlFor="fin-ml">Amount (ml)</label>
-                <input id="fin-ml" type="text" inputMode="numeric" value={finishMl} onChange={(e) => setFinishMl(e.target.value)} placeholder={settings.target_ml ? String(settings.target_ml) : "60"} />
+                <input id="fin-ml" type="text" inputMode="decimal" value={finishMl} onChange={(e) => setFinishMl(e.target.value)} placeholder={settings.target_ml ? String(settings.target_ml) : "60"} />
               </div>
               <div>
                 <label htmlFor="fin-method">How</label>
@@ -464,7 +465,7 @@ export default function FeedsTab() {
                     <input
                       id="pf-ml"
                       type="text"
-                      inputMode="numeric"
+                      inputMode="decimal"
                       value={pastSplit ? String(pastSplitTotal) : pastMl}
                       onChange={(e) => setPastMl(e.target.value)}
                       disabled={pastSplit}
@@ -511,7 +512,7 @@ export default function FeedsTab() {
                     </div>
                     <div>
                       <label>ml</label>
-                      <input type="text" inputMode="numeric" value={editMl} onChange={(e) => setEditMl(e.target.value)} />
+                      <input type="text" inputMode="decimal" value={editMl} onChange={(e) => setEditMl(e.target.value)} />
                     </div>
                     <div>
                       <label>How</label>
@@ -581,7 +582,7 @@ export default function FeedsTab() {
           </div>
         </div>
         <form className="row" style={{ marginTop: 10 }} onSubmit={logExpressing}>
-          <input type="text" inputMode="numeric" value={exprMl} onChange={(e) => setExprMl(e.target.value)} placeholder="Quick-log expressed ml…" aria-label="Expressed millilitres" />
+          <input type="text" inputMode="decimal" value={exprMl} onChange={(e) => setExprMl(e.target.value)} placeholder="Quick-log expressed ml…" aria-label="Expressed millilitres" />
           <button className="ghost" style={{ flex: "0 0 auto" }} type="submit">Add</button>
         </form>
         {coach && (
@@ -610,6 +611,8 @@ export default function FeedsTab() {
 
       <PumpDays supabase={supabase} familyId={family.id} />
 
+      <TopBreast supabase={supabase} familyId={family.id} />
+
       <PumpLog supabase={supabase} familyId={family.id} />
 
       {/* plan & sleep settings */}
@@ -632,7 +635,7 @@ export default function FeedsTab() {
               </div>
               <div>
                 <label>ml per feed</label>
-                <input type="text" inputMode="numeric" defaultValue={settings.baby_ml ?? ""} onBlur={(e) => saveSettings({ baby_ml: e.target.value ? +e.target.value : null })} placeholder="40" />
+                <input type="text" inputMode="decimal" defaultValue={settings.baby_ml ?? ""} onBlur={(e) => saveSettings({ baby_ml: e.target.value ? +e.target.value : null })} placeholder="40" />
               </div>
             </div>
 
@@ -666,7 +669,7 @@ export default function FeedsTab() {
               </div>
               <div>
                 <label>Minimum ml/pump</label>
-                <input type="text" inputMode="numeric" defaultValue={settings.target_ml ?? ""} onBlur={(e) => saveSettings({ target_ml: e.target.value ? +e.target.value : null })} placeholder="60" />
+                <input type="text" inputMode="decimal" defaultValue={settings.target_ml ?? ""} onBlur={(e) => saveSettings({ target_ml: e.target.value ? +e.target.value : null })} placeholder="60" />
               </div>
             </div>
             <p className="muted" style={{ marginTop: 6 }}>
