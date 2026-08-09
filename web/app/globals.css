@@ -105,14 +105,47 @@ body {
   cursor: pointer;
   text-decoration: underline;
 }
+/* privacy consent tick on onboarding */
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+.consent-row input {
+  width: auto;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+/* full-height app shell: content scrolls inside .scroll, the nav is a static
+   row pinned below it — so the bar can't drift as iOS shows/hides its chrome */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+.scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
 .tabs {
-  position: sticky;
-  top: 0;
+  flex: 0 0 auto;
   z-index: 10;
   display: flex;
   gap: 4px;
   background: var(--linen);
   padding: 10px 0 12px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 .tabs a {
   flex: 1;
@@ -1162,23 +1195,14 @@ select {
 /* ---------- iPhone: bottom thumb-reach tab bar ---------- */
 @media (max-width: 640px) {
   .tabs {
-    position: fixed;
-    top: auto;
-    bottom: 0;
-    left: 0;
-    right: 0;
     z-index: 40;
     background: var(--card);
     border-top: 1px solid var(--mist);
     padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
     gap: 2px;
     box-shadow: 0 -2px 12px rgba(46, 42, 51, 0.06);
-    /* own compositor layer: stops the bar lagging behind iOS scroll */
-    transform: translateZ(0);
-    will-change: transform;
-    backface-visibility: hidden;
   }
-  /* keyboard open: hide the bar so iOS can't float it mid-screen */
+  /* keyboard open: hide the bar so it can't sit over the keyboard */
   body.kb-open .tabs {
     display: none;
   }
@@ -1207,7 +1231,7 @@ select {
     font-weight: 800;
   }
   .wrap {
-    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    padding-bottom: 20px;
   }
   .hero {
     padding-top: calc(18px + env(safe-area-inset-top));

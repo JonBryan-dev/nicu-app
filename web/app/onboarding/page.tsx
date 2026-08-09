@@ -24,6 +24,7 @@ export default function OnboardingPage() {
     team?: string;
   } | null>(null);
   const [pushOffer, setPushOffer] = useState(false);
+  const [consent, setConsent] = useState(false);
 
   useEffect(() => {
     // already onboarded? go home
@@ -178,8 +179,15 @@ export default function OnboardingPage() {
               placeholder="e.g. Jon"
               required
             />
+            <label className="consent-row">
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              <span>
+                I&apos;ve read and agree to the{" "}
+                <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.
+              </span>
+            </label>
             <div style={{ marginTop: 16, textAlign: "center" }}>
-              <button className="primary" type="submit" disabled={busy}>
+              <button className="primary" type="submit" disabled={busy || !consent}>
                 {busy ? "Creating…" : "Let's go"}
               </button>
             </div>
@@ -218,8 +226,15 @@ export default function OnboardingPage() {
               placeholder="e.g. Grandma Sue"
               required
             />
+            <label className="consent-row">
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              <span>
+                I&apos;ve read and agree to the{" "}
+                <a href="/privacy" target="_blank" rel="noreferrer">Privacy Policy</a>.
+              </span>
+            </label>
             <div style={{ marginTop: 16, textAlign: "center" }}>
-              <button className="primary" type="submit" disabled={busy}>
+              <button className="primary" type="submit" disabled={busy || !consent}>
                 {busy ? "Joining…" : "Join"}
               </button>
             </div>

@@ -2,7 +2,7 @@
 // Shell — persistent hero (baby name, Day N, born line) + sticky pill tabs.
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useFamily } from "@/components/FamilyProvider";
 import { dayNumber, fmtDate } from "@/lib/dates";
 import type { Profile } from "@/lib/types";
@@ -82,43 +82,25 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     if (id === profile.id) router.refresh();
   }
 
-  const navRef = useRef<HTMLElement>(null);
-
-  // The bottom bar is fixed to the *layout* viewport, but iOS moves the
-  // *visible* viewport as the address bar shows/hides on scroll — so a plain
-  // fixed bar drifts. Re-pin it to the visible bottom on every viewport change,
-  // which also holds it steady during scroll. Separately, hide it only while a
-  // text field is genuinely focused (a real keyboard), never on scroll alone.
+  // The app shell is a full-height flex column with an internal scroll area, so
+  // the nav is a static row pinned at the bottom — nothing to drift as iOS
+  // shows/hides the address bar. We only hide it while a text field is focused
+  // and the keyboard is actually up, so it can't float over the keyboard.
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
-    const isField = (el: Element | null) =>
-      !!el && /^(INPUT|TEXTAREA)$/.test(el.tagName);
+    const isField = (el: Element | null) => !!el && /^(INPUT|TEXTAREA)$/.test(el.tagName);
     const sync = () => {
-      // keyboard up → hide; otherwise pin to the visible viewport bottom
-      const kbUp = isField(document.activeElement) && window.innerHeight - vv.height > 120;
+      const kbUp = isField(document.activeElement) && !!vv && window.innerHeight - vv.height > 120;
       document.body.classList.toggle("kb-open", kbUp);
-      const nav = navRef.current;
-      if (nav) {
-        // only the mobile bar is fixed; leave the desktop sticky nav alone
-        const mobile = window.matchMedia("(max-width: 640px)").matches;
-        const offset = window.innerHeight - vv.height - vv.offsetTop;
-        // 0 in a standalone PWA (no address bar); corrects the drift in Safari
-        nav.style.transform = mobile ? `translate3d(0, ${(-offset).toFixed(1)}px, 0)` : "";
-      }
     };
     const onBlur = () => setTimeout(sync, 60);
     window.addEventListener("focusin", sync);
     window.addEventListener("focusout", onBlur);
-    vv.addEventListener("resize", sync);
-    vv.addEventListener("scroll", sync);
-    sync();
+    vv?.addEventListener("resize", sync);
     return () => {
       window.removeEventListener("focusin", sync);
       window.removeEventListener("focusout", onBlur);
-      vv.removeEventListener("resize", sync);
-      vv.removeEventListener("scroll", sync);
-      if (navRef.current) navRef.current.style.transform = "";
+      vv?.removeEventListener("resize", sync);
       document.body.classList.remove("kb-open");
     };
   }, []);
@@ -135,6 +117,27 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [pw, setPw] = useState("");
   const [pwMsg, setPwMsg] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
+  const [showDanger, setShowDanger] = useState(false);
+  const [delText, setDelText] = useState("");
+  const [delBusy, setDelBusy] = useState(false);
+
+  async function deleteSpace() {
+    if (delText !== "DELETE") return;
+    setDelBusy(true);
+    const { error } = await supabase.functions.invoke("delete-account");
+    if (error) {
+      setDelBusy(false);
+      alert(
+        "Couldn't delete the space: " +
+          error.message +
+          "\n\nIf this keeps happening, the delete-account function may not be deployed yet."
+      );
+      return;
+    }
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
 
   async function setPassword(e: React.FormEvent) {
     e.preventDefault();
@@ -162,6 +165,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <PowerPumpProvider>
+    <div className="app">
+    <div className="scroll">
     <div className="wrap">
       <div className="hero">
         <div className="baby">{family.baby_name}</div>
@@ -182,6 +187,12 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <button onClick={() => setShowTheme((s) => !s)}>appearance</button> ·{" "}
           <button onClick={() => setShowPw((s) => !s)}>password</button> ·{" "}
           <button onClick={signOut}>sign out</button>
+          {isParent && (
+            <>
+              {" "}·{" "}
+              <button onClick={() => setShowDanger((s) => !s)}>delete space</button>
+            </>
+          )}
         </div>
       </div>
 
@@ -221,6 +232,35 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               {pwMsg}
             </p>
           )}
+        </div>
+      )}
+
+      {showDanger && isParent && (
+        <div className="card" style={{ borderColor: "var(--rose-deep)", borderWidth: 1, borderStyle: "solid" }}>
+          <h2 style={{ color: "var(--rose-deep)" }}>Delete this space</h2>
+          <p className="note">
+            This permanently deletes <b>everything</b> — every update, photo, feed log, journal note and
+            the accounts of everyone in {family.baby_name.split(" ")[0]}&apos;s space, for good. It cannot
+            be undone. To confirm, type <b>DELETE</b> below.
+          </p>
+          <div className="row">
+            <input
+              type="text"
+              value={delText}
+              onChange={(e) => setDelText(e.target.value)}
+              placeholder="Type DELETE"
+              aria-label="Type DELETE to confirm"
+              autoCapitalize="characters"
+            />
+            <button
+              className="primary"
+              style={{ flex: "0 0 auto", background: "var(--rose-deep)" }}
+              disabled={delText !== "DELETE" || delBusy}
+              onClick={deleteSpace}
+            >
+              {delBusy ? "Deleting…" : "Delete forever"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -322,7 +362,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
       <PushPrompt />
 
-      <nav className="tabs" aria-label="Sections" ref={navRef}>
+      {children}
+      </div>
+      </div>
+      <nav className="tabs" aria-label="Sections">
         {TABS.filter((t) =>
           profile.role === "team" ? t.href === "/" : isParent || !t.parentOnly
         ).map((t) => (
@@ -336,8 +379,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </Link>
         ))}
       </nav>
-
-      {children}
     </div>
     </PowerPumpProvider>
   );
