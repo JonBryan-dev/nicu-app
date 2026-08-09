@@ -1,7 +1,7 @@
 // /privacy — public privacy policy. NOTE: this is a solid working draft, not
-// legal advice. Fill the [bracketed] fields and have a UK data-protection
-// professional review it before a public launch (infants' health-context data
-// is high-sensitivity).
+// legal advice. Have a UK data-protection professional review it (and add a
+// registered contact address) before a public launch — infants' health-context
+// data is high-sensitivity.
 import Link from "next/link";
 
 export const metadata = { title: "Privacy Policy — Maisie" };
@@ -10,7 +10,7 @@ export default function PrivacyPage() {
   return (
     <div className="wrap" style={{ padding: "28px 16px 60px" }}>
       <h1 style={{ fontFamily: "var(--font-fraunces), Georgia, serif" }}>Privacy Policy</h1>
-      <p className="muted">Last updated: [DATE]</p>
+      <p className="muted">Last updated: 9 August 2026</p>
 
       <p>
         This app is a private space for a family to share updates, photos and care information during a
@@ -21,8 +21,11 @@ export default function PrivacyPage() {
 
       <h2>Who we are</h2>
       <p>
-        The data controller is [YOUR NAME / COMPANY], [ADDRESS]. For any privacy question or request,
-        contact us at <b>[CONTACT EMAIL]</b>.
+        The data controller is Jon Bryan. For any privacy question or request, contact us at{" "}
+        <b>jon@plumbgas.services</b>.
+        {/* Before a public App Store launch, add a registered contact address here —
+            a formal requirement for a controller. Deliberately omitted while the
+            app is friends-and-family only. */}
       </p>
 
       <h2>What we collect</h2>
@@ -57,7 +60,7 @@ export default function PrivacyPage() {
       <p>
         We use trusted providers to run the app: <b>Supabase</b> (database, authentication, file storage)
         and <b>Vercel</b> (hosting). They process data on our instructions under data-processing
-        agreements. [Confirm your data is hosted in the UK/EU region.]
+        agreements. Your data is stored in the <b>EU (Frankfurt, eu-central-1)</b>.
       </p>
 
       <h2>How long we keep it</h2>
