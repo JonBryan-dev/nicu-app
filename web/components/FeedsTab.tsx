@@ -525,6 +525,7 @@ export default function FeedsTab() {
                   <>
                     <span className="t">
                       {s.logged ? "✓" : "·"} {fmtHM(s.at)}
+                      {s.power && <span aria-hidden="true"> 💪</span>}
                       {s.at.getDate() !== new Date().getDate() && (
                         <span className="muted" style={{ fontWeight: 600 }}> +1</span>
                       )}
@@ -532,6 +533,7 @@ export default function FeedsTab() {
                     <span className="info" style={{ flex: 1 }}>
                       {s.logged
                         ? [
+                            s.power ? "power pump" : null,
                             rec && rec.method !== "pump" ? rec.method : null,
                             s.ml != null ? `${s.ml} ml` : "logged",
                             rec?.ml != null && settings.target_ml && rec.ml < settings.target_ml
@@ -539,6 +541,7 @@ export default function FeedsTab() {
                               : null,
                           ].filter(Boolean).join(" · ")
                         : [
+                            s.power ? "power pump — fixed, use the 💪 button" : null,
                             s.assigned === "pre-sleep"
                               ? "last one before Mum's sleep 😴"
                               : s.assigned === "post-sleep"
