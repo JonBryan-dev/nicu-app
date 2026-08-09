@@ -45,6 +45,18 @@ export async function uploadPhotos(
   familyId: string,
   files: File[]
 ): Promise<string[]> {
+  // friendly pre-checks — the database enforces the same cap server-side
+  const MAX_FAMILY_PHOTOS = 400;
+  const MAX_FILE_MB = 50;
+  const oversize = files.find((f) => f.size > MAX_FILE_MB * 1024 * 1024);
+  if (oversize) throw new Error(`"${oversize.name}" is over ${MAX_FILE_MB}MB — trim it down and try again.`);
+  const { data: existing } = await supabase.storage.from(BUCKET).list(familyId, { limit: 1000 });
+  if ((existing?.length ?? 0) + files.length > MAX_FAMILY_PHOTOS) {
+    throw new Error(
+      `Photo space is full (${MAX_FAMILY_PHOTOS} per family) — remove a few older photos to make room.`
+    );
+  }
+
   const paths: string[] = [];
   for (const raw of files) {
     const file = await stripMetadata(raw);
