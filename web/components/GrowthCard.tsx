@@ -11,7 +11,10 @@ import { useFamily } from "@/components/FamilyProvider";
 import { useRealtime } from "@/lib/useRealtime";
 import { todayKey, fmtDate } from "@/lib/dates";
 import { FENTON_CENTILES, curveAt, centileFor, pmaAt, fmtGestation } from "@/lib/fenton";
+import { igCurveAt, igCentileFor, IG_FROM } from "@/lib/intergrowth";
 import type { CareLog } from "@/lib/types";
+
+type RefKind = "fenton" | "ig";
 
 function ordinal(n: number): string {
   const s = n % 100;
@@ -45,28 +48,36 @@ function FentonChart({
   logs,
   dob,
   gestationDays,
+  refKind,
 }: {
   logs: CareLog[];
   dob: string;
   gestationDays: number;
+  refKind: RefKind;
 }) {
+  const isIG = refKind === "ig";
+  const cAt = isIG ? igCurveAt : curveAt;
+  const centFn = isIG ? igCentileFor : centileFor;
+  const minWeek = isIG ? IG_FROM : 22;
+  const curveColour = isIG ? "var(--sage)" : "var(--sky)";
+
   const pts = logs
     .filter((l) => l.weight_grams != null)
     .map((l) => ({
       pma: pmaAt(l.log_date, dob, gestationDays),
       kg: (l.weight_grams as number) / 1000,
     }))
-    .filter((p) => p.pma >= 22 && p.pma <= 50);
+    .filter((p) => p.pma >= minWeek && p.pma <= 50);
   if (!pts.length) return null;
 
   const latest = pts[pts.length - 1];
-  const cent = centileFor(latest.kg, latest.pma);
+  const cent = centFn(latest.kg, latest.pma);
 
   // window: a little context either side of her data
-  const x0 = Math.max(22, Math.floor(Math.min(...pts.map((p) => p.pma)) - 1));
+  const x0 = Math.max(minWeek, Math.floor(Math.min(...pts.map((p) => p.pma)) - 1));
   const x1 = Math.min(50, Math.ceil(Math.max(...pts.map((p) => p.pma)) + 1.5));
-  const lo = Math.min(curveAt(3, x0) * 0.92, Math.min(...pts.map((p) => p.kg)) - 0.05);
-  const hi = Math.max(curveAt(97, x1) * 1.03, Math.max(...pts.map((p) => p.kg)) + 0.05);
+  const lo = Math.min(cAt(3, x0) * 0.92, Math.min(...pts.map((p) => p.kg)) - 0.05);
+  const hi = Math.max(cAt(97, x1) * 1.03, Math.max(...pts.map((p) => p.kg)) + 0.05);
 
   const W = 330, H = 190, padL = 30, padR = 24, padT = 8, padB = 20;
   const x = (w: number) => padL + ((w - x0) / (x1 - x0 || 1)) * (W - padL - padR);
@@ -77,7 +88,7 @@ function FentonChart({
     let d = "";
     for (let i = 0; i <= 24; i++) {
       const w = x0 + i * step;
-      d += `${i ? "L" : "M"}${x(w).toFixed(1)},${y(curveAt(c, w)).toFixed(1)}`;
+      d += `${i ? "L" : "M"}${x(w).toFixed(1)},${y(cAt(c, w)).toFixed(1)}`;
     }
     return d;
   };
@@ -104,8 +115,8 @@ function FentonChart({
         ))}
         {FENTON_CENTILES.map((c) => (
           <g key={c}>
-            <path d={curvePath(c)} fill="none" stroke="var(--sky)" strokeWidth={c === 50 ? 1.6 : 1} opacity={c === 50 ? 0.75 : 0.45} />
-            <text x={W - padR + 3} y={y(curveAt(c, x1)) + 3} fontSize="8" fill="var(--sky)">{c}</text>
+            <path d={curvePath(c)} fill="none" stroke={curveColour} strokeWidth={c === 50 ? 1.6 : 1} opacity={c === 50 ? 0.75 : 0.45} />
+            <text x={W - padR + 3} y={y(cAt(c, x1)) + 3} fontSize="8" fill={curveColour}>{c}</text>
           </g>
         ))}
         <path d={line} fill="none" stroke="var(--rose-deep)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
@@ -114,15 +125,24 @@ function FentonChart({
         ))}
       </svg>
       <p className="muted" style={{ marginTop: 4 }}>
-        Fenton preterm chart (girls) · born {fmtGestation(gestationDays)} · now {fmtGestation(Math.round(latest.pma * 7))} corrected ·{" "}
-        <b>≈ {ordinal(cent)} centile</b>
+        {isIG ? "INTERGROWTH-21st preterm growth (girls)" : "Fenton preterm chart (girls)"} · born{" "}
+        {fmtGestation(gestationDays)} · now {fmtGestation(Math.round(latest.pma * 7))} corrected ·{" "}
+        <b>{isIG ? "" : "≈ "}{ordinal(cent)} centile</b>
       </p>
-      <p className="note" style={{ marginTop: 8 }}>
-        A gentle heads-up on reading this: the centile lines are built from babies&apos; sizes <i>at birth</i>.
-        Babies who are already out and growing on the outside almost always sit lower at first and then climb{" "}
-        <i>parallel</i> to the lines — that&apos;s the well-documented, expected pattern, not falling behind.
-        Her own line&apos;s steady climb is the thing that matters, and her team tracks exactly that.
-      </p>
+      {isIG ? (
+        <p className="note" style={{ marginTop: 8 }}>
+          These lines follow healthy <i>preterm</i> babies growing after birth — the realistic
+          comparison, which is why they sit lower than the Fenton (birth-size) lines. Built from
+          babies born at 26 weeks or later, shown from 27 weeks corrected.
+        </p>
+      ) : (
+        <p className="note" style={{ marginTop: 8 }}>
+          A gentle heads-up on reading this: the centile lines are built from babies&apos; sizes <i>at birth</i>.
+          Babies who are already out and growing on the outside almost always sit lower at first and then climb{" "}
+          <i>parallel</i> to the lines — that&apos;s the well-documented, expected pattern, not falling behind.
+          Her own line&apos;s steady climb is the thing that matters, and her team tracks exactly that.
+        </p>
+      )}
     </>
   );
 }
@@ -137,6 +157,7 @@ export default function GrowthCard() {
   const [err, setErr] = useState("");
   // local override so the chart appears the moment gestation is saved
   const [gestation, setGestation] = useState<number | null>(family.gestation_days ?? null);
+  const [refKind, setRefKind] = useState<RefKind>("fenton");
   const [gWeeks, setGWeeks] = useState(28);
   const [gDays, setGDays] = useState(0);
   const [showGest, setShowGest] = useState(false);
@@ -218,7 +239,34 @@ export default function GrowthCard() {
       {logs.length === 0 ? (
         <p className="muted">No weights logged yet.</p>
       ) : gestation ? (
-        <FentonChart logs={logs} dob={family.baby_dob} gestationDays={gestation} />
+        <>
+          {(() => {
+            const canIG = logs.some(
+              (l) =>
+                l.weight_grams != null &&
+                pmaAt(l.log_date, family.baby_dob, gestation) >= IG_FROM
+            );
+            return (
+              <div className="viewtabs" style={{ maxWidth: 320, margin: "8px auto 0" }}>
+                <button
+                  className={refKind === "fenton" ? "on" : ""}
+                  onClick={() => setRefKind("fenton")}
+                >
+                  Birth sizes
+                </button>
+                <button
+                  className={refKind === "ig" ? "on" : ""}
+                  disabled={!canIG}
+                  title={canIG ? undefined : "Appears from 27 weeks corrected age"}
+                  onClick={() => canIG && setRefKind("ig")}
+                >
+                  Preterm growth{!canIG && " (27w+)"}
+                </button>
+              </div>
+            );
+          })()}
+          <FentonChart logs={logs} dob={family.baby_dob} gestationDays={gestation} refKind={refKind} />
+        </>
       ) : (
         <PlainChart logs={logs} />
       )}
