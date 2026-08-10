@@ -105,6 +105,28 @@ body {
   cursor: pointer;
   text-decoration: underline;
 }
+/* photo lightbox */
+.photos img.zoomable {
+  cursor: zoom-in;
+}
+.overlay.lightbox {
+  background: rgba(20, 17, 24, 0.88);
+  z-index: 60;
+}
+.lightbox-inner {
+  max-width: min(96vw, 900px);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.lightbox-inner img {
+  max-width: 100%;
+  max-height: calc(92vh - 70px);
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+}
 /* privacy consent tick on onboarding */
 .consent-row {
   display: flex;

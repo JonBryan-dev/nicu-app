@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useFamily } from "@/components/FamilyProvider";
 import { useRealtime } from "@/lib/useRealtime";
 import { fmtStamp, todayKey } from "@/lib/dates";
-import { uploadPhotos, signedUrlMap, deletePhotos } from "@/lib/photos";
+import { uploadPhotos, signedUrlMap, deletePhotos, downloadUrlFor } from "@/lib/photos";
 import GrowthCard from "@/components/GrowthCard";
 import ParentJournal from "@/components/ParentJournal";
 import { MILESTONE_FIRSTS, type Update } from "@/lib/types";
@@ -42,6 +42,12 @@ export default function UpdatesTab() {
   const [reactions, setReactions] = useState<Record<string, ReactionRow[]>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [view, setView] = useState<"updates" | "journal">("updates");
+  const [lightbox, setLightbox] = useState<string | null>(null); // storage path
+
+  async function downloadPhoto(path: string) {
+    const url = await downloadUrlFor(supabase, path);
+    if (url) window.location.href = url; // Content-Disposition: attachment
+  }
 
   const [mode, setMode] = useState<Mode>("free");
   const [body, setBody] = useState("");
@@ -405,7 +411,14 @@ export default function UpdatesTab() {
                         />
                       ) : (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img key={p} src={urls[p]} alt="Update photo" loading="lazy" />
+                        <img
+                          key={p}
+                          src={urls[p]}
+                          alt="Update photo — tap to enlarge"
+                          loading="lazy"
+                          className="zoomable"
+                          onClick={() => setLightbox(p)}
+                        />
                       )
                     ) : (
                       <div key={p} className="photo-skel" />
@@ -497,6 +510,23 @@ export default function UpdatesTab() {
         )}
       </div>
         </>
+      )}
+
+      {lightbox && urls[lightbox] && (
+        <div className="overlay lightbox" onClick={() => setLightbox(null)} role="dialog" aria-label="Photo viewer">
+          <div className="lightbox-inner" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={urls[lightbox]} alt="Full-size photo" />
+            <div className="row" style={{ justifyContent: "center", marginTop: 10 }}>
+              <button className="primary" style={{ flex: "0 0 auto" }} onClick={() => downloadPhoto(lightbox)}>
+                ⬇ Download
+              </button>
+              <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setLightbox(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   );

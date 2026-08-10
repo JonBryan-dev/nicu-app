@@ -3,7 +3,7 @@ export type Role = "parent" | "family" | "team";
 export type ListType = "daily" | "weekly" | "wellbeing_mum" | "wellbeing_dad" | "respite";
 export type ShiftAssignee = "both" | "mum" | "dad" | "family" | "rest";
 
-export interface Family { id: string; baby_name: string; baby_dob: string; parent_code?: string; family_code?: string; team_code?: string; calendar_token?: string; }
+export interface Family { id: string; baby_name: string; baby_dob: string; parent_code?: string; family_code?: string; team_code?: string; calendar_token?: string; gestation_days?: number | null; }
 export interface Profile { id: string; family_id: string; display_name: string; role: Role; }
 export interface Update { id: string; family_id: string; author_id: string; body: string; is_milestone: boolean; milestone_label?: string | null; image_paths?: string[]; created_at: string; author?: Profile; }
 export interface CareLog { id: string; family_id: string; logged_by: string | null; log_date: string; weight_grams: number | null; feeds_note: string | null; created_at: string; }

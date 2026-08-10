@@ -90,6 +90,19 @@ export async function signedUrlMap(
   return map;
 }
 
+// Short-lived signed URL that triggers a download (Content-Disposition:
+// attachment) — same private-bucket security as viewing, just saved to device.
+export async function downloadUrlFor(
+  supabase: SupabaseClient,
+  path: string
+): Promise<string | null> {
+  const name = path.split("/").pop() ?? "photo.jpg";
+  const { data } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(path, 300, { download: name });
+  return data?.signedUrl ?? null;
+}
+
 export async function deletePhotos(
   supabase: SupabaseClient,
   paths: string[]
