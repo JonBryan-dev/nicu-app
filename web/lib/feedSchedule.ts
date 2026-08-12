@@ -12,6 +12,7 @@ export interface FeedSettingsRow {
   night_from: string;
   target_ml: number | null;
   feeds_per_day?: number | null; // when set, day gaps auto-computed
+  power_pump_time?: string | null; // 'HH:MM[:SS]' — the daily fixed power pump
   // baby's ward-set feed plan (the unit does the feeds)
   baby_first_feed?: string | null; // 'HH:MM'
   baby_interval_min?: number | null;
@@ -68,6 +69,12 @@ function inWindow(m: number, start: string, end: string): boolean {
   return s <= e ? m >= s && m < e : m >= s || m < e;
 }
 
+// the daily power pump is pinned to feed_settings.power_pump_time — it never
+// re-anchors. Pre-migration rows fall back to this default.
+export const DEFAULT_POWER_PUMP_TIME = "04:45";
+// the day always closes with a fixed last pump at this hour
+export const LAST_PUMP_HOUR = 23;
+
 export const DEFAULT_SETTINGS: FeedSettingsRow = {
   interval_day_min: 180,
   interval_night_min: null,
@@ -75,6 +82,7 @@ export const DEFAULT_SETTINGS: FeedSettingsRow = {
   night_from: "20:00",
   target_ml: null,
   feeds_per_day: 8,
+  power_pump_time: DEFAULT_POWER_PUMP_TIME,
 };
 
 /**
@@ -153,8 +161,6 @@ function windowBoundsAround(
 }
 
 const MIN_PUMP_GAP_MS = 45 * 60000;
-// the nightly power pump is pinned to this hour — it never re-anchors
-export const POWER_PUMP_HOUR = 23;
 
 /** Next pump after `from`: interval-stepped, but a session that would land in
  *  Mum's sleep brackets it — moved to just before the window (if there's a
@@ -245,11 +251,10 @@ export function computeSchedule(
     anchor.setHours(h, m, 0, 0);
   }
 
-  // project forward until tomorrow's day_from
+  // the list covers the calendar day only — it always closes with the fixed
+  // 23:00 pump; anything after midnight belongs to the next day's list
   const endOfDay = new Date(now);
-  endOfDay.setDate(endOfDay.getDate() + 1);
-  const [eh, em] = settings.day_from.split(":").map(Number);
-  endOfDay.setHours(eh, em, 0, 0);
+  endOfDay.setHours(24, 0, 0, 0);
 
   // planned first session when nothing's logged yet and the day hasn't started
   if (!sorted.length && anchor > now) {
@@ -263,17 +268,55 @@ export function computeSchedule(
   }
 
   if (pumping) {
-    // Project the rest of the day, bracketing Mum's protected windows.
-    // feeds_per_day is a MINIMUM session count: if bracketing squeezes the
-    // day below it, tighten the daytime gap and re-plan until it fits.
-    const project = (dayGapOverride?: number): ScheduleEntry[] => {
+    // Two FIXED sessions structure the day — they never move with
+    // re-anchoring: the power pump at its configured time (default 04:45),
+    // and the 23:00 pump that always closes the day's list.
+    const [ph, pm] = (settings.power_pump_time ?? DEFAULT_POWER_PUMP_TIME)
+      .split(":")
+      .map(Number);
+    const powerAt = new Date(now);
+    powerAt.setHours(ph, pm, 0, 0);
+    const powerEnd = new Date(+powerAt + 60 * 60000); // it runs a full hour
+    const lastAt = new Date(now);
+    lastAt.setHours(LAST_PUMP_HOUR, 0, 0, 0);
+
+    // already logged today? badge it instead of planning it
+    const powerLogged = sorted.find((f) =>
+      (f.note ?? "").includes("Power pump")
+    );
+    if (powerLogged) {
+      const done = entries.find(
+        (x) => x.logged && +x.at === +new Date(powerLogged.started_at)
+      );
+      if (done) done.power = true;
+    }
+    // a session logged at/after 22:00 counts as the day-closing pump
+    const lastCovered = sorted.some(
+      (f) => new Date(f.started_at).getHours() >= LAST_PUMP_HOUR - 1
+    );
+
+    const pins: { at: Date; resumeFrom: Date; power?: boolean }[] = [];
+    // keep the power pin visible while it's ahead or mid-session (its hour)
+    if (!powerLogged && +powerEnd > +now && +powerAt < +endOfDay)
+      pins.push({ at: powerAt, resumeFrom: powerEnd, power: true });
+    if (!lastCovered && +lastAt > +anchor && +lastAt < +endOfDay)
+      pins.push({ at: lastAt, resumeFrom: endOfDay });
+    pins.sort((a, b) => +a.at - +b.at);
+
+    // step interval-spaced sessions from `from` until `until`,
+    // bracketing Mum's protected windows
+    const projectSeg = (
+      from: Date,
+      until: Date,
+      dayGapOverride?: number
+    ): ScheduleEntry[] => {
       const out: ScheduleEntry[] = [];
-      let t = new Date(anchor);
+      let t = new Date(from);
       let guard = 0;
       while (guard++ < 30) {
         const { at, tag } = nextPump(t, settings, windows, dayGapOverride);
         if (+at <= +t) break; // safety against zero-progress
-        if (at >= endOfDay) break;
+        if (+at >= +until) break;
         out.push({
           at: new Date(at),
           logged: false,
@@ -285,6 +328,33 @@ export function computeSchedule(
       return out;
     };
 
+    // project around the pins: leave an hour clear before each fixed session
+    // (no double-pumping), and resume from its end
+    const project = (dayGapOverride?: number): ScheduleEntry[] => {
+      const out: ScheduleEntry[] = [];
+      let cur = new Date(anchor);
+      for (const pin of pins) {
+        if (+pin.at > +cur) {
+          out.push(
+            ...projectSeg(cur, new Date(+pin.at - 60 * 60000), dayGapOverride)
+          );
+          cur = new Date(pin.at);
+        }
+        out.push({
+          at: new Date(pin.at),
+          logged: false,
+          assigned: null,
+          duringVisit: visitFor(pin.at, slots),
+          power: pin.power,
+        });
+        if (+pin.resumeFrom > +cur) cur = new Date(pin.resumeFrom);
+      }
+      out.push(...projectSeg(cur, endOfDay, dayGapOverride));
+      return out;
+    };
+
+    // feeds_per_day is a MINIMUM session count: if bracketing squeezes the
+    // day below it, tighten the daytime gap and re-plan until it fits.
     let dayGap = computeGaps(settings).dayGap;
     let planned = project(dayGap);
     const minSessions = settings.feeds_per_day ?? 0;
@@ -299,48 +369,8 @@ export function computeSchedule(
       planned = project(dayGap);
     }
 
-    // The 23:00 power pump is FIXED — it never moves with re-anchoring.
-    // If tonight's is already logged, just badge it; otherwise clear planned
-    // sessions out of the hour before it, pin the 23:00 entry, and re-plan the
-    // overnight from its end (it runs a full hour, so from midnight).
-    const powerAt = new Date(now);
-    powerAt.setHours(POWER_PUMP_HOUR, 0, 0, 0);
-    const powerLogged = sorted.find(
-      (f) =>
-        (f.note ?? "").includes("Power pump") &&
-        new Date(f.started_at).getHours() >= POWER_PUMP_HOUR - 2
-    );
-    if (powerLogged) {
-      const done = entries.find(
-        (x) => x.logged && +x.at === +new Date(powerLogged.started_at)
-      );
-      if (done) done.power = true;
-      entries.push(...planned);
-      return entries;
-    }
-    entries.push(...planned.filter((p) => +p.at < +powerAt - 60 * 60000));
-    if (powerAt < endOfDay) {
-      entries.push({
-        at: powerAt,
-        logged: false,
-        assigned: null,
-        duringVisit: visitFor(powerAt, slots),
-        power: true,
-      });
-      let t = new Date(+powerAt + 60 * 60000); // hour-long session ends here
-      let guard = 0;
-      while (guard++ < 10) {
-        const { at, tag } = nextPump(t, settings, windows);
-        if (+at <= +t || at >= endOfDay) break;
-        entries.push({
-          at: new Date(at),
-          logged: false,
-          assigned: tag,
-          duringVisit: visitFor(at, slots),
-        });
-        t = at;
-      }
-    }
+    entries.push(...planned);
+    entries.sort((a, b) => +a.at - +b.at);
     return entries;
   }
 

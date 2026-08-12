@@ -13,6 +13,7 @@ import {
   babyFeedsPerDay,
   fmtHM,
   DEFAULT_SETTINGS,
+  DEFAULT_POWER_PUMP_TIME,
   type FeedSettingsRow,
   type SleepWindowRow,
   type SlotRow,
@@ -211,9 +212,11 @@ export default function FeedsTab() {
     );
   }
 
-  function todayAt(hhmm: string): string {
+  // new time on the feed's ORIGINAL day — editing an overnight session must
+  // not drag it onto today
+  function sameDayAt(baseIso: string, hhmm: string): string {
     const [h, m] = hhmm.split(":").map(Number);
-    const d = new Date();
+    const d = new Date(baseIso);
     d.setHours(h, m, 0, 0);
     return d.toISOString();
   }
@@ -298,10 +301,12 @@ export default function FeedsTab() {
   async function saveEdit() {
     if (!editId) return;
     setErr("");
+    const rec = feeds.find((f) => f.id === editId);
+    if (!rec) return;
     const ml = editMl ? parseFloat(editMl) : null;
     const { error } = await supabase
       .from("feeds")
-      .update({ started_at: todayAt(editTime), ml, method: editMethod })
+      .update({ started_at: sameDayAt(rec.started_at, editTime), ml, method: editMethod })
       .eq("id", editId);
     if (error) setErr(error.message);
     setEditId(null);
@@ -428,7 +433,17 @@ export default function FeedsTab() {
             <div className="row wrap">
               <button className="primary" onClick={startFeed} style={{ flex: "0 0 auto" }}>Start pumping now</button>
               <PowerPumpButton />
-              <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setShowPast((s) => !s)}>
+              <button
+                className="ghost"
+                style={{ flex: "0 0 auto" }}
+                onClick={() => {
+                  // re-default the day on open — the mounted value goes stale
+                  // when the app sits open past midnight (the "4am pump on
+                  // yesterday" bug)
+                  if (!showPast) setPastDate(todayKey());
+                  setShowPast((s) => !s);
+                }}
+              >
                 Log a past one
               </button>
             </div>
@@ -526,9 +541,6 @@ export default function FeedsTab() {
                     <span className="t">
                       {s.logged ? "✓" : "·"} {fmtHM(s.at)}
                       {s.power && <span aria-hidden="true"> 💪</span>}
-                      {s.at.getDate() !== new Date().getDate() && (
-                        <span className="muted" style={{ fontWeight: 600 }}> +1</span>
-                      )}
                     </span>
                     <span className="info" style={{ flex: 1 }}>
                       {s.logged
@@ -659,6 +671,14 @@ export default function FeedsTab() {
                   <option value={210}>3½ hours</option>
                   <option value={240}>4 hours</option>
                 </select>
+              </div>
+              <div>
+                <label>Power pump (fixed)</label>
+                <input
+                  type="time"
+                  value={(settings.power_pump_time ?? DEFAULT_POWER_PUMP_TIME).slice(0, 5)}
+                  onChange={(e) => e.target.value && saveSettings({ power_pump_time: e.target.value })}
+                />
               </div>
             </div>
             <div className="row wrap">

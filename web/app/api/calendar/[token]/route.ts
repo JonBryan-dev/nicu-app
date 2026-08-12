@@ -119,7 +119,14 @@ export async function GET(
               : s.assigned === "post-meal"
                 ? " (after break)"
                 : "";
-      events.push(vevent(`pump-${i}-${dt(s.at)}@nicu`, dt(s.at), dt(end), `🥛 Pump${note}`));
+      events.push(
+        vevent(
+          `pump-${i}-${dt(s.at)}@nicu`,
+          dt(s.at),
+          dt(s.power ? new Date(+s.at + 60 * 60000) : end),
+          s.power ? "💪 Power pump" : `🥛 Pump${note}`
+        )
+      );
     });
 
   // baby's ward-set feed times, today and tomorrow

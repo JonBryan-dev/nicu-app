@@ -391,7 +391,8 @@ label {
 .logt { font-variant-numeric: tabular-nums; color: var(--ink-soft); min-width: 44px; }
 .logml { font-weight: 700; min-width: 54px; }
 .logside { font-size: 0.78rem; color: var(--sky); }
-.logmin { font-size: 0.78rem; color: var(--ink-soft); margin-left: auto; white-space: nowrap; }
+.logmin { font-size: 0.78rem; color: var(--ink-soft); white-space: nowrap; }
+.logdel { margin-left: auto; flex: 0 0 auto; }
 /* Updates ⇄ private journal switch */
 .viewtabs {
   display: flex;
