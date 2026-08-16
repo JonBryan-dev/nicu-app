@@ -105,6 +105,46 @@ body {
   cursor: pointer;
   text-decoration: underline;
 }
+/* ---------- journal / companion ---------- */
+.card.journal.vent { border-color: var(--sky); }
+.card.journal.vent h2 { color: var(--sky); }
+.post.journal-entry.vent::before { background: var(--sky); border-color: var(--sky); }
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.chatlog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px 2px;
+  margin-top: 6px;
+}
+.bubble {
+  max-width: 88%;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble.user {
+  align-self: flex-end;
+  background: var(--rose-deep);
+  color: var(--on-accent);
+  border-bottom-right-radius: 4px;
+}
+.bubble.assistant {
+  align-self: flex-start;
+  background: var(--mist);
+  color: var(--ink);
+  border-bottom-left-radius: 4px;
+}
 /* ---------- gas guide ---------- */
 .gas-kicker {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -1370,8 +1410,8 @@ select {
     z-index: 40;
     background: var(--card);
     border-top: 1px solid var(--mist);
-    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
-    gap: 2px;
+    padding: 6px 2px calc(6px + env(safe-area-inset-bottom));
+    gap: 0;
     box-shadow: 0 -2px 12px rgba(46, 42, 51, 0.06);
   }
   /* keyboard open: hide the bar so it can't sit over the keyboard */
@@ -1386,8 +1426,10 @@ select {
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: 6px 2px;
-    font-size: 0.62rem;
+    padding: 6px 0;
+    font-size: 0.58rem;
+    min-width: 0;
+    letter-spacing: -0.01em;
     min-height: 48px;
     justify-content: center;
   }

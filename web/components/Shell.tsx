@@ -48,6 +48,7 @@ function InviteShare({ code, baby }: { code?: string; baby: string }) {
 
 const TABS = [
   { href: "/", label: "Updates", icon: "✦" },
+  { href: "/journal", label: "Journal", icon: "📓", parentOnly: true },
   { href: "/feeds", label: "Feeds", icon: "🍼", parentOnly: true },
   { href: "/gas", label: "Gas", icon: "🩸", parentOnly: true },
   { href: "/lists", label: "Lists", icon: "☑️", parentOnly: true },

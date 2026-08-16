@@ -7,7 +7,6 @@ import { useRealtime } from "@/lib/useRealtime";
 import { fmtStamp, todayKey } from "@/lib/dates";
 import { uploadPhotos, signedUrlMap, deletePhotos, downloadUrlFor } from "@/lib/photos";
 import GrowthCard from "@/components/GrowthCard";
-import ParentJournal from "@/components/ParentJournal";
 import { MILESTONE_FIRSTS, type Update } from "@/lib/types";
 
 type Mode = "free" | "guided";
@@ -41,7 +40,6 @@ export default function UpdatesTab() {
   const [comments, setComments] = useState<Record<string, CommentRow[]>>({});
   const [reactions, setReactions] = useState<Record<string, ReactionRow[]>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [view, setView] = useState<"updates" | "journal">("updates");
   const [lightbox, setLightbox] = useState<string | null>(null); // storage path
 
   async function downloadPhoto(path: string) {
@@ -242,31 +240,6 @@ export default function UpdatesTab() {
 
   return (
     <section>
-      {isParent && (
-        <div className="viewtabs" role="tablist" aria-label="Updates or private journal">
-          <button
-            role="tab"
-            aria-selected={view === "updates"}
-            className={view === "updates" ? "on" : ""}
-            onClick={() => setView("updates")}
-          >
-            Updates
-          </button>
-          <button
-            role="tab"
-            aria-selected={view === "journal"}
-            className={view === "journal" ? "on" : ""}
-            onClick={() => setView("journal")}
-          >
-            🔒 Our journal
-          </button>
-        </div>
-      )}
-
-      {view === "journal" ? (
-        <ParentJournal />
-      ) : (
-        <>
       {canPost && (
         <form className="card" onSubmit={post}>
           <h2>Share an update</h2>
@@ -509,8 +482,6 @@ export default function UpdatesTab() {
           ))
         )}
       </div>
-        </>
-      )}
 
       {lightbox && urls[lightbox] && (
         <div className="overlay lightbox" onClick={() => setLightbox(null)} role="dialog" aria-label="Photo viewer">
