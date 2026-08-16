@@ -183,7 +183,7 @@ export default function JournalTab() {
         <h2>Today&apos;s question for the team</h2>
         <p style={{ fontSize: "1.05rem", fontWeight: 700, lineHeight: 1.4 }}>&ldquo;{q.q}&rdquo;</p>
         <p className="muted">Why this matters: {q.why}</p>
-        <div className="row wrap" style={{ marginTop: 10 }}>
+        <div className="row rowwrap" style={{ marginTop: 10 }}>
           <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => { setQOffset((o) => o + 1); setAnswering(false); }}>Give me another</button>
           <button className="primary" style={{ flex: "0 0 auto" }} onClick={() => setAnswering((a) => !a)}>✓ Asked it — jot the answer</button>
         </div>
@@ -222,7 +222,7 @@ export default function JournalTab() {
       <div className="card">
         <h2>How are <i>you</i> today?</h2>
         <p style={{ lineHeight: 1.5 }}>{wb}</p>
-        <div className="row wrap" style={{ marginTop: 10 }}>
+        <div className="row rowwrap" style={{ marginTop: 10 }}>
           {(["rough day", "okay", "good day"] as Mood[]).map((m) => (
             <button key={m} className={moodToday === m ? "primary" : "ghost"} style={{ flex: "1 1 30%" }} onClick={() => logMood(m)}>
               {m === "rough day" ? "🌧 Rough day" : m === "okay" ? "🌤 Okay" : "☀️ Good day"}

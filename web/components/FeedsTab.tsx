@@ -408,7 +408,7 @@ export default function FeedsTab() {
               {String(Math.floor(elapsed / 60)).padStart(2, "0")}:{String(elapsed % 60).padStart(2, "0")}
               <span className="muted"> since {fmtHM(new Date(openFeed.started_at))}</span>
             </div>
-            <div className="row wrap" style={{ marginTop: 10 }}>
+            <div className="row rowwrap" style={{ marginTop: 10 }}>
               <div>
                 <label htmlFor="fin-ml">Amount (ml)</label>
                 <input id="fin-ml" type="text" inputMode="decimal" value={finishMl} onChange={(e) => setFinishMl(e.target.value)} placeholder={settings.target_ml ? String(settings.target_ml) : "60"} />
@@ -425,7 +425,7 @@ export default function FeedsTab() {
         ) : (
           <>
             <p className="note">Starting the timer logs the pump and re-plans the rest of today&apos;s sessions.</p>
-            <div className="row wrap">
+            <div className="row rowwrap">
               <button className="primary" onClick={startFeed} style={{ flex: "0 0 auto" }}>Start pumping now</button>
               <PowerPumpButton />
               <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setShowPast((s) => !s)}>
@@ -437,7 +437,7 @@ export default function FeedsTab() {
             </p>
             {showPast && (
               <form onSubmit={logPastFeed} style={{ marginTop: 10 }}>
-                <div className="row wrap">
+                <div className="row rowwrap">
                   <div>
                     <label htmlFor="pf-d">Day</label>
                     <input id="pf-d" type="date" value={pastDate} max={todayKey()} onChange={(e) => setPastDate(e.target.value)} required />
@@ -451,7 +451,7 @@ export default function FeedsTab() {
                     <input id="pf-min" type="text" inputMode="numeric" value={pastMins} onChange={(e) => setPastMins(e.target.value)} placeholder="15" />
                   </div>
                 </div>
-                <div className="row wrap" style={{ marginTop: 10 }}>
+                <div className="row rowwrap" style={{ marginTop: 10 }}>
                   <div>
                     <label htmlFor="pf-l">Left (ml)</label>
                     <input id="pf-l" type="text" inputMode="numeric" value={pastLeft} onChange={(e) => setPastLeft(e.target.value)} placeholder="30" />
@@ -473,7 +473,7 @@ export default function FeedsTab() {
                     />
                   </div>
                 </div>
-                <div className="row wrap" style={{ marginTop: 10 }}>
+                <div className="row rowwrap" style={{ marginTop: 10 }}>
                   <div>
                     <label htmlFor="pf-m">How</label>
                     <MethodSelect id="pf-m" value={pastMethod} onChange={setPastMethod} />
@@ -505,7 +505,7 @@ export default function FeedsTab() {
             return (
               <div key={i} className={`feedrow ${s.logged ? "done" : ""}`}>
                 {isEditing ? (
-                  <div className="row wrap" style={{ flex: 1, alignItems: "flex-end" }}>
+                  <div className="row rowwrap" style={{ flex: 1, alignItems: "flex-end" }}>
                     <div>
                       <label>Time</label>
                       <input type="time" value={editTime} onChange={(e) => setEditTime(e.target.value)} />
@@ -626,7 +626,7 @@ export default function FeedsTab() {
         ) : (
           <>
             <h3>{family.baby_name.split(" ")[0]}&apos;s feeds (unit&apos;s plan)</h3>
-            <div className="row wrap">
+            <div className="row rowwrap">
               <div>
                 <label>How often</label>
                 <select value={settings.baby_interval_min ?? 0} onChange={(e) => saveSettings({ baby_interval_min: +e.target.value || null })}>
@@ -643,7 +643,7 @@ export default function FeedsTab() {
             </div>
 
             <h3>Your pumping</h3>
-            <div className="row wrap">
+            <div className="row rowwrap">
               <div>
                 <label>Minimum pumps in 24h</label>
                 <select value={settings.feeds_per_day ?? 8} onChange={(e) => saveSettings({ feeds_per_day: +e.target.value })}>
@@ -661,7 +661,7 @@ export default function FeedsTab() {
                 </select>
               </div>
             </div>
-            <div className="row wrap">
+            <div className="row rowwrap">
               <div>
                 <label>Day starts</label>
                 <input type="time" value={settings.day_from.slice(0, 5)} onChange={(e) => saveSettings({ day_from: e.target.value })} />
@@ -748,7 +748,7 @@ function SleepWindows({
           <button type="button" className="tiny" onClick={() => w.id && onRemove(w.id)} aria-label={`Remove ${title} window`}>✕</button>
         </div>
       ))}
-      <div className="row wrap" style={{ alignItems: "flex-end" }}>
+      <div className="row rowwrap" style={{ alignItems: "flex-end" }}>
         <div>
           <input type="time" value={start} onChange={(e) => setStart(e.target.value)} aria-label={`${title} from`} />
         </div>

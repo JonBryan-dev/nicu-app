@@ -70,6 +70,13 @@ body {
   margin: 0 auto;
   padding: 0 14px 96px;
 }
+/* links inherit the theme accent — the browser default blue is off-palette in
+   the light themes and close to unreadable on the night theme's dark card */
+a {
+  color: var(--rose-deep);
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
 .hero {
   padding: 26px 4px 14px;
   text-align: center;
@@ -479,6 +486,9 @@ label {
 }
 .row > * {
   flex: 1;
+  /* without this, flex items refuse to shrink below their min-content width —
+     an input next to a button collapses to a stub and the button overflows */
+  min-width: 0;
 }
 .muted {
   color: var(--ink-soft);
@@ -1309,15 +1319,17 @@ select {
   font-size: 1.3rem;
   font-weight: 600;
 }
-/* narrow screens: let plan rows wrap instead of overlapping */
-.row.wrap {
+/* narrow screens: let plan rows wrap instead of overlapping.
+   Named "rowwrap", not "wrap" — .wrap is the page container, and a row
+   carrying both classes inherited its 560px cap and 96px bottom padding. */
+.row.rowwrap {
   flex-wrap: wrap;
 }
-.row.wrap > * {
+.row.rowwrap > * {
   flex: 1 1 45%;
   min-width: 130px;
 }
-.row.wrap > button {
+.row.rowwrap > button {
   flex: 0 0 auto;
   min-width: 0;
 }
@@ -1450,11 +1462,15 @@ select {
   .hero {
     padding-top: calc(18px + env(safe-area-inset-top));
   }
-  /* full-width primary actions feel better under a thumb */
-  .card > form button.primary,
+  /* full-width primary actions feel better under a thumb… */
   .card button.primary {
     width: 100%;
   }
+  /* …except beside something else in a flex row, where a 100%-wide button
+     overflows the card and starves its neighbour. Kept more specific than the
+     rule above so source order alone doesn't decide the winner. */
+  .card .row button.primary,
+  .card .composer-row button.primary,
   .row button.primary,
   .composer-row button.primary {
     width: auto;

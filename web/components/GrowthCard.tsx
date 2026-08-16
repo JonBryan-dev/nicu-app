@@ -266,7 +266,7 @@ export default function GrowthCard() {
         showGest ? (
           <form onSubmit={saveGestation} style={{ marginTop: 10 }}>
             <p className="note">Set how far along she was at birth and this becomes a proper preterm chart, with her centile worked out at her corrected age.</p>
-            <div className="row wrap">
+            <div className="row rowwrap">
               <div><label htmlFor="gc-gw">Weeks</label>
                 <select id="gc-gw" value={gWeeks} onChange={(e) => setGWeeks(+e.target.value)}>
                   {Array.from({ length: 21 }, (_, i) => 22 + i).map((w) => <option key={w} value={w}>{w}</option>)}
@@ -285,7 +285,7 @@ export default function GrowthCard() {
 
       {isParent && (open ? (
         <form onSubmit={save} style={{ marginTop: 10 }}>
-          <div className="row wrap">
+          <div className="row rowwrap">
             <div><label htmlFor="gc-w">Weight (kg)</label>
               <input id="gc-w" type="text" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="1.42" /></div>
             <div><label htmlFor="gc-l">Length (cm)</label>

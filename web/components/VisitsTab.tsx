@@ -368,7 +368,7 @@ export default function VisitsTab() {
             Only slots you open here can be booked — visits only happen when
             they suit you.
           </p>
-          <div className="row wrap">
+          <div className="row rowwrap">
             <div>
               <label htmlFor="vs-date">Date</label>
               <input
@@ -401,7 +401,7 @@ export default function VisitsTab() {
               />
             </div>
           </div>
-          <div className="row wrap" style={{ marginTop: 10 }}>
+          <div className="row rowwrap" style={{ marginTop: 10 }}>
             <div>
               <label htmlFor="vs-repeat">Repeat</label>
               <select
@@ -631,7 +631,7 @@ export default function VisitsTab() {
               <p className="note">
                 Suggest a day and time — Mum &amp; Dad get a nudge and can approve it with one tap.
               </p>
-              <div className="row wrap">
+              <div className="row rowwrap">
                 <div>
                   <label htmlFor="vr-d">Day</label>
                   <input id="vr-d" type="date" value={reqDate} min={todayKey()} onChange={(e) => setReqDate(e.target.value)} required />

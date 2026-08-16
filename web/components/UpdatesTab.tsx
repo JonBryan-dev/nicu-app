@@ -268,7 +268,7 @@ export default function UpdatesTab() {
             />
           ) : (
             <div className="guided">
-              <div className="row wrap">
+              <div className="row rowwrap">
                 <div>
                   <label htmlFor="g-w">Weight (kg)</label>
                   <input id="g-w" type="text" inputMode="decimal" value={gWeight} onChange={(e) => setGWeight(e.target.value)} placeholder="1.42" />
