@@ -17,3 +17,4 @@ supabase/.temp/
 # os / editor
 .DS_Store
 *.log
+web/tsconfig.tsbuildinfo
