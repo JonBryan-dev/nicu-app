@@ -164,3 +164,57 @@ export function interpret(entry: GasEntry, prev: GasEntry | null): Interpretatio
 
   return { worst, headline: HEADLINE[worst], lines, per: { ph, co2, fio2, hco3, glu, lac } };
 }
+
+// ---------- her own baseline ----------
+// The textbook ranges are one lens; the team's real lens is "change from HER
+// usual". Once there are enough samples, we describe today's pH and CO₂
+// against her own typical range (median ± the middle half of her history) —
+// so a CO₂ that's "high" on paper but exactly where she always sits reads
+// as steady-for-her, and a genuine move away from her usual stands out.
+export interface Baseline {
+  n: number;
+  co2: { median: number; lo: number; hi: number };
+  ph: { median: number; lo: number; hi: number };
+}
+const MIN_FOR_BASELINE = 5;
+
+function quartiles(vals: number[]): { median: number; lo: number; hi: number } {
+  const s = [...vals].sort((a, b) => a - b);
+  const q = (p: number) => {
+    const i = (s.length - 1) * p;
+    const a = Math.floor(i), b = Math.ceil(i);
+    return s[a] + (s[b] - s[a]) * (i - a);
+  };
+  return { median: q(0.5), lo: q(0.25), hi: q(0.75) };
+}
+
+/** Baseline from prior entries (excluding the current one). null until enough history. */
+export function baseline(history: GasEntry[]): Baseline | null {
+  const h = history.slice(-20); // her recent self, not week-one
+  if (h.length < MIN_FOR_BASELINE) return null;
+  return { n: h.length, co2: quartiles(h.map((e) => e.co2)), ph: quartiles(h.map((e) => e.ph)) };
+}
+
+/** Plain-language lines comparing this sample to her own baseline. */
+export function baselineLines(entry: GasEntry, b: Baseline | null, name = "she"): string[] {
+  if (!b) return [];
+  const out: string[] = [];
+  const co2Span = Math.max(0.6, b.co2.hi - b.co2.lo);   // never treat a razor-thin range as meaningful
+  const phSpan = Math.max(0.05, b.ph.hi - b.ph.lo);
+  const dc = entry.co2 - b.co2.median;
+  const dp = entry.ph - b.ph.median;
+  const rng = `${b.co2.lo.toFixed(1)}–${b.co2.hi.toFixed(1)}`;
+  if (Math.abs(dc) <= co2Span * 0.75) {
+    out.push(`For ${name}: this CO₂ (${entry.co2.toFixed(1)}) is right where ${name} usually sits — her typical over the last ${b.n} gases is ${rng} kPa (middle of the range ${b.co2.median.toFixed(1)}). ${b.co2.median > 6.0 ? "Her CO₂ runs a bit high as her normal, and the team already knows that; what they watch is a move away from it, not the textbook number." : "Steady for her."}`);
+  } else if (dc > 0) {
+    out.push(`For ${name}: this CO₂ (${entry.co2.toFixed(1)}) is higher than her usual ${rng} kPa — up ${dc.toFixed(1)} on her typical. That's the kind of shift the team notices even when the number itself is one they'd normally accept for her.`);
+  } else {
+    out.push(`For ${name}: this CO₂ (${entry.co2.toFixed(1)}) is lower than her usual ${rng} kPa — down ${Math.abs(dc).toFixed(1)} on her typical. Genuinely good if it holds.`);
+  }
+  if (Math.abs(dp) > phSpan * 0.75) {
+    out.push(dp > 0
+      ? `Her pH (${entry.ph.toFixed(2)}) is above her usual ${b.ph.lo.toFixed(2)}–${b.ph.hi.toFixed(2)} — better than her norm.`
+      : `Her pH (${entry.ph.toFixed(2)}) is below her usual ${b.ph.lo.toFixed(2)}–${b.ph.hi.toFixed(2)} — a step down from her norm, worth mentioning to the team alongside how she looks.`);
+  }
+  return out;
+}

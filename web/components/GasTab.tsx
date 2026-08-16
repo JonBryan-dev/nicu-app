@@ -11,6 +11,8 @@ import { useRealtime } from "@/lib/useRealtime";
 import { fmtStamp } from "@/lib/dates";
 import {
   interpret,
+  baseline,
+  baselineLines,
   BOUNDS,
   MODES,
   type Band,
@@ -166,15 +168,27 @@ export default function GasTab() {
 
   const setF = (k: keyof Form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  // her own baseline: prior samples only (never the one being read), so a
+  // "high for the textbook, normal for Maisie" CO₂ reads as steady-for-her
+  const first = family.baby_name.split(" ")[0];
+  function withBaseline(reading: Interpretation, current: Row): Interpretation {
+    const prior = (rows ?? []).filter((x) => x.id !== current.id && x.taken_at < current.taken_at).map(toEntry);
+    const b = baseline(prior);
+    const extra = baselineLines(toEntry(current), b, first);
+    return extra.length ? { ...reading, lines: [...reading.lines, ...extra] } : reading;
+  }
+
   // HEIC (and anything else the API can't take) is re-encoded to JPEG on the
   // phone — iPhone Safari decodes HEIC natively, so a canvas round-trip does
   // the conversion with no server dependency. Bonus: it also strips EXIF.
   async function toJpeg(file: File): Promise<File> {
-    const ok = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-    if (ok.includes(file.type) && file.size < 4 * 1024 * 1024) return file;
+    // Always re-encode: phone photos are 4000px+ and 2–12 MB, and nearly all
+    // of the "scanning" wait is uploading that over hospital Wi-Fi and the
+    // model chewing through it. The printout is text — 1600px on the long
+    // edge reads perfectly and is ~10× smaller. Small files skip straight through.
+    if (file.size < 350 * 1024 && ["image/jpeg", "image/png", "image/webp"].includes(file.type)) return file;
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    // cap the long edge — the printout is text, 2000px is plenty and keeps uploads small
-    const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(bitmap.width * scale);
     canvas.height = Math.round(bitmap.height * scale);
@@ -182,7 +196,7 @@ export default function GasTab() {
     if (!ctx) return file;
     ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     if ("close" in bitmap) bitmap.close();
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.9));
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.82));
     if (!blob) return file;
     return new File([blob], "printout.jpg", { type: "image/jpeg" });
   }
@@ -254,7 +268,7 @@ export default function GasTab() {
       support_mode: insert.support_mode as SupportMode | null, sample_no: null, note: insert.note, source: insert.source, created_by: profile.id,
     };
     const prevRow = [...(rows ?? [])].filter((r) => r.taken_at < local.taken_at).sort((a, b) => a.taken_at.localeCompare(b.taken_at)).at(-1) ?? null;
-    const reading = interpret(toEntry(local), prevRow ? toEntry(prevRow) : null);
+    const reading = withBaseline(interpret(toEntry(local), prevRow ? toEntry(prevRow) : null), local);
 
     const queueIt = () => {
       const q = readQueue();
@@ -289,7 +303,7 @@ export default function GasTab() {
   function reopen(r: Row) {
     const idx = (rows ?? []).findIndex((x) => x.id === r.id);
     const prevRow = idx > 0 ? rows![idx - 1] : null;
-    setResult({ ...interpret(toEntry(r), prevRow ? toEntry(prevRow) : null), row: r });
+    setResult({ ...withBaseline(interpret(toEntry(r), prevRow ? toEntry(prevRow) : null), r), row: r });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 

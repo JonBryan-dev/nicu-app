@@ -59,7 +59,7 @@ export async function POST(req: Request) {
   try {
     const msg = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 1000,
+      max_tokens: 400, // the JSON is ~150 tokens; a tight cap keeps latency down
       messages: [
         {
           role: "user",

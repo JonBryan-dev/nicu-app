@@ -92,5 +92,24 @@ eq("FiO2 +4 no flag", t3.lines.some((l) => l.includes("needing more oxygen")), f
 eq("same mode no ladder line", t3.lines.some((l) => l.includes("stepped")), false);
 eq("pH improved", t3.lines.some((l) => l.includes("pH has improved")), true);
 
-console.log(`\n${pass} passed, ${fail} failed`);
+
+// ---- personal baseline: "high for the textbook, normal for her"
+{
+  const hist = [7.2, 7.5, 7.4, 7.6, 7.3, 7.4, 7.5, 7.3].map((co2, i) => E({ ph: 7.30 + (i % 3) * 0.01, co2, mode: "cpap" }));
+  eq("no baseline under 5 samples", g.baseline(hist.slice(0, 4)), null);
+  const b = g.baseline(hist);
+  eq("baseline n", b.n, 8);
+  eq("baseline co2 median ~7.4", +b.co2.median.toFixed(2), 7.4);
+  const steady = g.baselineLines(E({ ph: 7.31, co2: 7.4, mode: "cpap" }), b, "Maisie");
+  eq("7.4 for a 7.4-baseline baby: steady-for-her", /right where Maisie usually sits/.test(steady[0]), true);
+  eq("...and explains her CO2 runs high as her normal", /runs a bit high as her normal/.test(steady[0]), true);
+  const up = g.baselineLines(E({ ph: 7.31, co2: 8.6, mode: "cpap" }), b, "Maisie");
+  eq("8.6 for her: flagged as higher than usual", /higher than her usual/.test(up[0]), true);
+  const down = g.baselineLines(E({ ph: 7.31, co2: 6.0, mode: "cpap" }), b, "Maisie");
+  eq("6.0 for her: lower than usual, good if it holds", /lower than her usual/.test(down[0]) && /good/.test(down[0]), true);
+  const phDrop = g.baselineLines(E({ ph: 7.20, co2: 7.4, mode: "cpap" }), b, "Maisie");
+  eq("pH well below her usual: flagged", phDrop.some((l) => /below her usual/.test(l)), true);
+  eq("textbook band unchanged by baseline (still soft for 7.4)", g.classifyCO2(7.4, "cpap")[0], "soft");
+}
+console.log(`baseline: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
