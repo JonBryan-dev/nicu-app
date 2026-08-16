@@ -1,20 +1,35 @@
 "use client";
-// GrowthCard — weight & feeds log with the Fenton preterm growth chart.
-// Once a parent sets gestation at birth, weights are plotted at Maisie's
-// postmenstrual age against the Fenton girls' centiles (3/10/50/90/97) with
-// her approximate centile called out. Copy is deliberately honest: babies
-// growing on the outside usually sit below the birth-size curves at first
-// (postnatal growth restriction — Ehrenkranz 1999 and successors), so the
-// shape of her line matters more than which centile she's on.
+// GrowthCard — weight, length & head-circumference log with preterm growth
+// charts. Once a parent sets gestation at birth, measurements are plotted at
+// Maisie's postmenstrual age against girls' centiles (3/10/50/90/97) from two
+// references, toggled: "Birth sizes" (Fenton — intrauterine, ≈centile) and
+// "Preterm growth" (INTERGROWTH-21st — real preterm babies after birth, exact
+// centile). Copy is deliberately honest: babies growing on the outside usually
+// sit below the birth-size curves at first (postnatal growth restriction —
+// Ehrenkranz 1999 and successors), so the shape of her line matters more than
+// which centile she's on.
 import { useCallback, useEffect, useState } from "react";
 import { useFamily } from "@/components/FamilyProvider";
 import { useRealtime } from "@/lib/useRealtime";
 import { todayKey, fmtDate } from "@/lib/dates";
-import { FENTON_CENTILES, curveAt, centileFor, pmaAt, fmtGestation } from "@/lib/fenton";
+import { FENTON_CENTILES, curveAt, centileFor, pmaAt, fmtGestation, type Measure } from "@/lib/fenton";
 import { igCurveAt, igCentileFor, IG_FROM } from "@/lib/intergrowth";
 import type { CareLog } from "@/lib/types";
 
 type RefKind = "fenton" | "ig";
+
+const MEASURES: { id: Measure; label: string; unit: string; digits: number; field: keyof CareLog }[] = [
+  { id: "weight", label: "Weight", unit: "kg", digits: 3, field: "weight_grams" },
+  { id: "length", label: "Length", unit: "cm", digits: 1, field: "length_cm" },
+  { id: "hc", label: "Head", unit: "cm", digits: 1, field: "head_cm" },
+];
+
+// value in chart units (kg / cm) for a log row, or null
+function valueOf(l: CareLog, m: Measure): number | null {
+  if (m === "weight") return l.weight_grams == null ? null : l.weight_grams / 1000;
+  if (m === "length") return l.length_cm == null ? null : Number(l.length_cm);
+  return l.head_cm == null ? null : Number(l.head_cm);
+}
 
 function ordinal(n: number): string {
   const s = n % 100;
@@ -22,66 +37,59 @@ function ordinal(n: number): string {
   return `${n}${["th", "st", "nd", "rd"][Math.min(n % 10, 4)] ?? "th"}`;
 }
 
-function PlainChart({ logs }: { logs: CareLog[] }) {
+function PlainChart({ logs, measure }: { logs: CareLog[]; measure: Measure }) {
   const pts = logs
-    .filter((l) => l.weight_grams != null)
-    .map((l) => ({ date: l.log_date, g: l.weight_grams as number }));
+    .map((l) => ({ date: l.log_date, v: valueOf(l, measure) }))
+    .filter((p): p is { date: string; v: number } => p.v != null);
   if (pts.length < 2) return null;
   const W = 320, H = 90, pad = 6;
-  const gs = pts.map((p) => p.g);
-  const min = Math.min(...gs), max = Math.max(...gs);
+  const vs = pts.map((p) => p.v);
+  const min = Math.min(...vs), max = Math.max(...vs);
   const span = max - min || 1;
   const x = (i: number) => pad + (i * (W - 2 * pad)) / (pts.length - 1);
-  const y = (g: number) => H - pad - ((g - min) / span) * (H - 2 * pad);
-  const d = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.g).toFixed(1)}`).join(" ");
+  const y = (v: number) => H - pad - ((v - min) / span) * (H - 2 * pad);
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="Weight over time" style={{ display: "block", marginTop: 4 }}>
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="Measurement over time" style={{ display: "block", marginTop: 4 }}>
       <path d={d} fill="none" stroke="var(--sage)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
       {pts.map((p, i) => (
-        <circle key={i} cx={x(i)} cy={y(p.g)} r="3" fill="var(--sage)" />
+        <circle key={i} cx={x(i)} cy={y(p.v)} r="3" fill="var(--sage)" />
       ))}
     </svg>
   );
 }
 
-function FentonChart({
-  logs,
-  dob,
-  gestationDays,
-  refKind,
+function RefChart({
+  logs, dob, gestationDays, refKind, measure,
 }: {
-  logs: CareLog[];
-  dob: string;
-  gestationDays: number;
-  refKind: RefKind;
+  logs: CareLog[]; dob: string; gestationDays: number; refKind: RefKind; measure: Measure;
 }) {
   const isIG = refKind === "ig";
-  const cAt = isIG ? igCurveAt : curveAt;
-  const centFn = isIG ? igCentileFor : centileFor;
+  const cAt = (c: (typeof FENTON_CENTILES)[number], w: number) => (isIG ? igCurveAt(c, w, measure) : curveAt(c, w, measure));
+  const centFn = (v: number, w: number) => (isIG ? igCentileFor(v, w, measure) : centileFor(v, w, measure));
   const minWeek = isIG ? IG_FROM : 22;
   const curveColour = isIG ? "var(--sage)" : "var(--sky)";
+  const m = MEASURES.find((x) => x.id === measure)!;
 
   const pts = logs
-    .filter((l) => l.weight_grams != null)
-    .map((l) => ({
-      pma: pmaAt(l.log_date, dob, gestationDays),
-      kg: (l.weight_grams as number) / 1000,
-    }))
-    .filter((p) => p.pma >= minWeek && p.pma <= 50);
-  if (!pts.length) return null;
+    .map((l) => ({ pma: pmaAt(l.log_date, dob, gestationDays), v: valueOf(l, measure) }))
+    .filter((p): p is { pma: number; v: number } => p.v != null && p.pma >= minWeek && p.pma <= 50);
+  if (!pts.length) {
+    return <p className="muted" style={{ marginTop: 6 }}>No {m.label.toLowerCase()} measurements in this chart&apos;s range yet.</p>;
+  }
 
   const latest = pts[pts.length - 1];
-  const cent = centFn(latest.kg, latest.pma);
+  const cent = centFn(latest.v, latest.pma);
 
-  // window: a little context either side of her data
   const x0 = Math.max(minWeek, Math.floor(Math.min(...pts.map((p) => p.pma)) - 1));
   const x1 = Math.min(50, Math.ceil(Math.max(...pts.map((p) => p.pma)) + 1.5));
-  const lo = Math.min(cAt(3, x0) * 0.92, Math.min(...pts.map((p) => p.kg)) - 0.05);
-  const hi = Math.max(cAt(97, x1) * 1.03, Math.max(...pts.map((p) => p.kg)) + 0.05);
+  const padV = measure === "weight" ? 0.05 : 0.5;
+  const lo = Math.min(cAt(3, x0) * 0.96, Math.min(...pts.map((p) => p.v)) - padV);
+  const hi = Math.max(cAt(97, x1) * 1.02, Math.max(...pts.map((p) => p.v)) + padV);
 
-  const W = 330, H = 190, padL = 30, padR = 24, padT = 8, padB = 20;
+  const W = 330, H = 190, padL = 32, padR = 24, padT = 8, padB = 20;
   const x = (w: number) => padL + ((w - x0) / (x1 - x0 || 1)) * (W - padL - padR);
-  const y = (kg: number) => H - padB - ((kg - lo) / (hi - lo || 1)) * (H - padT - padB);
+  const y = (v: number) => H - padB - ((v - lo) / (hi - lo || 1)) * (H - padT - padB);
 
   const curvePath = (c: (typeof FENTON_CENTILES)[number]) => {
     const step = (x1 - x0) / 24;
@@ -92,18 +100,17 @@ function FentonChart({
     }
     return d;
   };
-  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(p.pma).toFixed(1)},${y(p.kg).toFixed(1)}`).join(" ");
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${x(p.pma).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
 
-  // x ticks every 2 weeks; y ticks at sensible ½kg steps
   const xTicks: number[] = [];
   for (let w = Math.ceil(x0 / 2) * 2; w <= x1; w += 2) xTicks.push(w);
-  const yStep = hi - lo > 2 ? 1 : 0.5;
+  const yStep = measure === "weight" ? (hi - lo > 2 ? 1 : 0.5) : hi - lo > 12 ? 5 : 2;
   const yTicks: number[] = [];
   for (let v = Math.ceil(lo / yStep) * yStep; v <= hi; v += yStep) yTicks.push(+v.toFixed(1));
 
   return (
     <>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label="Weight against the Fenton preterm centiles" style={{ display: "block", marginTop: 6 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={`${m.label} against preterm centiles`} style={{ display: "block", marginTop: 6 }}>
         {yTicks.map((v) => (
           <g key={`y${v}`}>
             <line x1={padL} y1={y(v)} x2={W - padR} y2={y(v)} stroke="var(--mist)" strokeWidth="1" />
@@ -121,11 +128,11 @@ function FentonChart({
         ))}
         <path d={line} fill="none" stroke="var(--rose-deep)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
         {pts.map((p, i) => (
-          <circle key={i} cx={x(p.pma)} cy={y(p.kg)} r={i === pts.length - 1 ? 3.4 : 2.4} fill="var(--rose-deep)" />
+          <circle key={i} cx={x(p.pma)} cy={y(p.v)} r={i === pts.length - 1 ? 3.4 : 2.4} fill="var(--rose-deep)" />
         ))}
       </svg>
       <p className="muted" style={{ marginTop: 4 }}>
-        {isIG ? "INTERGROWTH-21st preterm growth (girls)" : "Fenton preterm chart (girls)"} · born{" "}
+        {isIG ? "INTERGROWTH-21st preterm growth" : "Fenton preterm chart"} (girls, {m.label.toLowerCase()}) · born{" "}
         {fmtGestation(gestationDays)} · now {fmtGestation(Math.round(latest.pma * 7))} corrected ·{" "}
         <b>{isIG ? "" : "≈ "}{ordinal(cent)} centile</b>
       </p>
@@ -152,127 +159,105 @@ export default function GrowthCard() {
   const [logs, setLogs] = useState<CareLog[]>([]);
   const [open, setOpen] = useState(false);
   const [weight, setWeight] = useState("");
+  const [length, setLength] = useState("");
+  const [head, setHead] = useState("");
   const [feeds, setFeeds] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  // local override so the chart appears the moment gestation is saved
   const [gestation, setGestation] = useState<number | null>(family.gestation_days ?? null);
-  const [refKind, setRefKind] = useState<RefKind>("fenton");
   const [gWeeks, setGWeeks] = useState(28);
   const [gDays, setGDays] = useState(0);
   const [showGest, setShowGest] = useState(false);
+  const [refKind, setRefKind] = useState<RefKind>("fenton");
+  const [measure, setMeasure] = useState<Measure>("weight");
 
   const load = useCallback(async () => {
-    const { data } = await supabase
-      .from("care_logs")
-      .select("*")
-      .eq("family_id", family.id)
-      .order("log_date");
+    const { data } = await supabase.from("care_logs").select("*").eq("family_id", family.id).order("log_date");
     setLogs((data as CareLog[]) ?? []);
   }, [supabase, family.id]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
   useRealtime(supabase, "care_logs", family.id, load);
 
-  const latest = [...logs].reverse().find((l) => l.weight_grams != null);
+  const latestW = [...logs].reverse().find((l) => l.weight_grams != null);
+  const has = (m: Measure) => logs.some((l) => valueOf(l, m) != null);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
-    const kg = parseFloat(weight);
-    const grams = weight ? Math.round(kg * 1000) : null;
-    if (grams !== null && (isNaN(grams) || grams < 200 || grams > 20000)) {
-      setErr("Enter a weight in kg, e.g. 1.42");
-      return;
-    }
-    if (grams === null && !feeds.trim()) return;
+    const grams = weight ? Math.round(parseFloat(weight) * 1000) : null;
+    if (grams !== null && (isNaN(grams) || grams < 200 || grams > 20000)) return setErr("Enter a weight in kg, e.g. 1.42");
+    const len = length ? parseFloat(length) : null;
+    if (len !== null && (isNaN(len) || len < 20 || len > 80)) return setErr("Enter a length in cm, e.g. 38.5");
+    const hc = head ? parseFloat(head) : null;
+    if (hc !== null && (isNaN(hc) || hc < 15 || hc > 50)) return setErr("Enter head circumference in cm, e.g. 26.2");
+    if (grams === null && len === null && hc === null && !feeds.trim()) return;
     setBusy(true);
-    const { error } = await supabase.from("care_logs").upsert(
-      {
-        family_id: family.id,
-        logged_by: profile.id,
-        log_date: todayKey(),
-        weight_grams: grams,
-        feeds_note: feeds.trim() || null,
-      },
-      { onConflict: "family_id,log_date" }
-    );
+    // only send the fields the parent filled in, so a weight-only day doesn't blank a weekly length
+    const row: Record<string, unknown> = { family_id: family.id, logged_by: profile.id, log_date: todayKey() };
+    if (grams !== null) row.weight_grams = grams;
+    if (len !== null) row.length_cm = len;
+    if (hc !== null) row.head_cm = hc;
+    if (feeds.trim()) row.feeds_note = feeds.trim();
+    const { error } = await supabase.from("care_logs").upsert(row, { onConflict: "family_id,log_date" });
     setBusy(false);
     if (error) {
-      setErr(error.message);
+      setErr(/length_cm|head_cm/.test(error.message) ? "Length/head columns aren't in the database yet — run migration 029." : error.message);
       return;
     }
-    setWeight("");
-    setFeeds("");
+    setWeight(""); setLength(""); setHead(""); setFeeds("");
     load();
   }
 
   async function saveGestation(e: React.FormEvent) {
     e.preventDefault();
     const days = gWeeks * 7 + gDays;
-    const { error } = await supabase
-      .from("families")
-      .update({ gestation_days: days })
-      .eq("id", family.id);
+    const { error } = await supabase.from("families").update({ gestation_days: days }).eq("id", family.id);
     if (error) {
-      setErr(
-        /gestation_days/.test(error.message)
-          ? "The gestation column isn't in the database yet — run migration 026 first."
-          : error.message
-      );
+      setErr(/gestation_days/.test(error.message) ? "The gestation column isn't in the database yet — run migration 026 first." : error.message);
       return;
     }
     setGestation(days);
     setShowGest(false);
   }
 
+  const canIG = !!gestation && logs.some((l) => valueOf(l, measure) != null && pmaAt(l.log_date, family.baby_dob, gestation) >= IG_FROM);
+
   return (
     <div className="card">
       <h2>
         Growth{" "}
-        {latest && (
-          <span className="muted">· {(latest.weight_grams! / 1000).toFixed(3)} kg</span>
-        )}
+        {latestW && <span className="muted">· {(latestW.weight_grams! / 1000).toFixed(3)} kg</span>}
       </h2>
+
+      {logs.length > 0 && (
+        <div className="viewtabs" style={{ maxWidth: 320, margin: "6px auto 0" }}>
+          {MEASURES.map((m) => (
+            <button key={m.id} className={measure === m.id ? "on" : ""} disabled={!has(m.id)} title={has(m.id) ? undefined : `No ${m.label.toLowerCase()} logged yet`} onClick={() => setMeasure(m.id)}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {logs.length === 0 ? (
-        <p className="muted">No weights logged yet.</p>
+        <p className="muted">No measurements logged yet.</p>
       ) : gestation ? (
         <>
-          {(() => {
-            const canIG = logs.some(
-              (l) =>
-                l.weight_grams != null &&
-                pmaAt(l.log_date, family.baby_dob, gestation) >= IG_FROM
-            );
-            return (
-              <div className="viewtabs" style={{ maxWidth: 320, margin: "8px auto 0" }}>
-                <button
-                  className={refKind === "fenton" ? "on" : ""}
-                  onClick={() => setRefKind("fenton")}
-                >
-                  Birth sizes
-                </button>
-                <button
-                  className={refKind === "ig" ? "on" : ""}
-                  disabled={!canIG}
-                  title={canIG ? undefined : "Appears from 27 weeks corrected age"}
-                  onClick={() => canIG && setRefKind("ig")}
-                >
-                  Preterm growth{!canIG && " (27w+)"}
-                </button>
-              </div>
-            );
-          })()}
-          <FentonChart logs={logs} dob={family.baby_dob} gestationDays={gestation} refKind={refKind} />
+          <div className="viewtabs" style={{ maxWidth: 320, margin: "8px auto 0" }}>
+            <button className={refKind === "fenton" ? "on" : ""} onClick={() => setRefKind("fenton")}>Birth sizes</button>
+            <button className={refKind === "ig" ? "on" : ""} disabled={!canIG} title={canIG ? undefined : "Appears from 27 weeks corrected age"} onClick={() => canIG && setRefKind("ig")}>
+              Preterm growth{!canIG && " (27w+)"}
+            </button>
+          </div>
+          <RefChart logs={logs} dob={family.baby_dob} gestationDays={gestation} refKind={canIG ? refKind : "fenton"} measure={measure} />
         </>
       ) : (
-        <PlainChart logs={logs} />
+        <PlainChart logs={logs} measure={measure} />
       )}
       {logs.length > 0 && (
         <p className="muted" style={{ marginTop: 2 }}>
-          {logs.filter((l) => l.weight_grams != null).length} weigh-ins ·{" "}
+          {logs.filter((l) => valueOf(l, measure) != null).length} {measure === "weight" ? "weigh-ins" : "measurements"} ·{" "}
           {fmtDate(logs[0].log_date)} → {fmtDate(logs[logs.length - 1].log_date)}
         </p>
       )}
@@ -280,83 +265,46 @@ export default function GrowthCard() {
       {isParent && !gestation && logs.length > 0 && (
         showGest ? (
           <form onSubmit={saveGestation} style={{ marginTop: 10 }}>
-            <p className="note">
-              Set how far along she was at birth and this becomes a proper Fenton preterm
-              chart, with her centile worked out at her corrected age.
-            </p>
+            <p className="note">Set how far along she was at birth and this becomes a proper preterm chart, with her centile worked out at her corrected age.</p>
             <div className="row wrap">
-              <div>
-                <label htmlFor="gc-gw">Weeks</label>
+              <div><label htmlFor="gc-gw">Weeks</label>
                 <select id="gc-gw" value={gWeeks} onChange={(e) => setGWeeks(+e.target.value)}>
-                  {Array.from({ length: 21 }, (_, i) => 22 + i).map((w) => (
-                    <option key={w} value={w}>{w}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="gc-gd">+ days</label>
+                  {Array.from({ length: 21 }, (_, i) => 22 + i).map((w) => <option key={w} value={w}>{w}</option>)}
+                </select></div>
+              <div><label htmlFor="gc-gd">+ days</label>
                 <select id="gc-gd" value={gDays} onChange={(e) => setGDays(+e.target.value)}>
-                  {[0, 1, 2, 3, 4, 5, 6].map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
+                  {[0, 1, 2, 3, 4, 5, 6].map((d) => <option key={d} value={d}>{d}</option>)}
+                </select></div>
               <button className="primary" style={{ flex: "0 0 auto" }} type="submit">Save</button>
             </div>
           </form>
         ) : (
-          <button className="ghost" style={{ marginTop: 8 }} onClick={() => setShowGest(true)}>
-            📈 Add her birth gestation → Fenton chart
-          </button>
+          <button className="ghost" style={{ marginTop: 8 }} onClick={() => setShowGest(true)}>📈 Add her birth gestation → preterm chart</button>
         )
       )}
 
-      {isParent &&
-        (open ? (
-          <form onSubmit={save} style={{ marginTop: 10 }}>
-            <div className="row wrap">
-              <div>
-                <label htmlFor="gc-w">Today&apos;s weight (kg)</label>
-                <input
-                  id="gc-w"
-                  type="text"
-                  inputMode="decimal"
-                  value={weight}
-                  onChange={(e) => setWeight(e.target.value)}
-                  placeholder="1.42"
-                />
-              </div>
-              <div>
-                <label htmlFor="gc-f">Feeds (note)</label>
-                <input
-                  id="gc-f"
-                  type="text"
-                  value={feeds}
-                  onChange={(e) => setFeeds(e.target.value)}
-                  placeholder="e.g. 8 × 35ml NGT"
-                />
-              </div>
-            </div>
-            <div className="row" style={{ marginTop: 10 }}>
-              <button className="primary" type="submit" disabled={busy}>
-                Save today
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                style={{ flex: "0 0 auto" }}
-                onClick={() => setOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-            {err && <p className="err">{err}</p>}
-          </form>
-        ) : (
-          <button className="ghost" style={{ marginTop: 10 }} onClick={() => setOpen(true)}>
-            Log today&apos;s weight &amp; feeds
-          </button>
-        ))}
+      {isParent && (open ? (
+        <form onSubmit={save} style={{ marginTop: 10 }}>
+          <div className="row wrap">
+            <div><label htmlFor="gc-w">Weight (kg)</label>
+              <input id="gc-w" type="text" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="1.42" /></div>
+            <div><label htmlFor="gc-l">Length (cm)</label>
+              <input id="gc-l" type="text" inputMode="decimal" value={length} onChange={(e) => setLength(e.target.value)} placeholder="38.5" /></div>
+            <div><label htmlFor="gc-h">Head (cm)</label>
+              <input id="gc-h" type="text" inputMode="decimal" value={head} onChange={(e) => setHead(e.target.value)} placeholder="26.2" /></div>
+          </div>
+          <label htmlFor="gc-f" style={{ marginTop: 8 }}>Feeds (note)</label>
+          <input id="gc-f" type="text" value={feeds} onChange={(e) => setFeeds(e.target.value)} placeholder="e.g. 8 × 35ml NGT" />
+          <p className="muted" style={{ marginTop: 6 }}>Fill in whatever was measured today — length and head are usually weekly.</p>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button className="primary" type="submit" disabled={busy}>Save today</button>
+            <button type="button" className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setOpen(false)}>Close</button>
+          </div>
+          {err && <p className="err">{err}</p>}
+        </form>
+      ) : (
+        <button className="ghost" style={{ marginTop: 10 }} onClick={() => setOpen(true)}>Log today&apos;s measurements</button>
+      ))}
       {!open && err && <p className="err">{err}</p>}
     </div>
   );

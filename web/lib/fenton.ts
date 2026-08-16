@@ -1,34 +1,44 @@
-// lib/fenton.ts — helpers over the Fenton girls' weight centiles: curve values
-// at any (fractional) postmenstrual age, and an approximate centile for a
-// weight. Interpolation is linear between weekly points and between adjacent
-// centile curves — an honest "≈", not a clinical z-score.
+// lib/fenton.ts — helpers over the Fenton girls' centiles for weight (kg),
+// length (cm) and head circumference (cm): curve values at any (fractional)
+// postmenstrual age, and an approximate centile for a measurement.
+// Interpolation is linear between weekly points and between adjacent centile
+// curves — an honest "≈", not a clinical z-score.
 import {
   FENTON_GIRLS_WEIGHT_KG,
+  FENTON_GIRLS_LENGTH_CM,
+  FENTON_GIRLS_HC_CM,
   FENTON_WEEKS_FROM,
   FENTON_WEEKS_TO,
 } from "./fenton-data";
 
 export const FENTON_CENTILES = [3, 10, 50, 90, 97] as const;
 export type FentonCentile = (typeof FENTON_CENTILES)[number];
+export type Measure = "weight" | "length" | "hc";
 
-/** Weight (kg) on a centile curve at a (possibly fractional) PMA in weeks. */
-export function curveAt(centile: FentonCentile, pmaWeeks: number): number {
-  const arr = FENTON_GIRLS_WEIGHT_KG[centile];
+const TABLE: Record<Measure, Record<number, number[]>> = {
+  weight: FENTON_GIRLS_WEIGHT_KG,
+  length: FENTON_GIRLS_LENGTH_CM,
+  hc: FENTON_GIRLS_HC_CM,
+};
+
+/** Value on a centile curve at a (possibly fractional) PMA in weeks. */
+export function curveAt(centile: FentonCentile, pmaWeeks: number, measure: Measure = "weight"): number {
+  const arr = TABLE[measure][centile];
   const t = Math.min(Math.max(pmaWeeks, FENTON_WEEKS_FROM), FENTON_WEEKS_TO) - FENTON_WEEKS_FROM;
   const i = Math.min(Math.floor(t), arr.length - 2);
   const frac = t - i;
   return arr[i] + (arr[i + 1] - arr[i]) * frac;
 }
 
-/** Approximate centile (1–99, clamped) for a weight at a PMA. */
-export function centileFor(weightKg: number, pmaWeeks: number): number {
-  const vals = FENTON_CENTILES.map((c) => ({ c, v: curveAt(c, pmaWeeks) }));
-  if (weightKg <= vals[0].v) return Math.max(1, Math.round(3 * (weightKg / vals[0].v)));
-  if (weightKg >= vals[vals.length - 1].v) return 97;
+/** Approximate centile (1–99, clamped) for a measurement at a PMA. */
+export function centileFor(value: number, pmaWeeks: number, measure: Measure = "weight"): number {
+  const vals = FENTON_CENTILES.map((c) => ({ c, v: curveAt(c, pmaWeeks, measure) }));
+  if (value <= vals[0].v) return Math.max(1, Math.round(3 * (value / vals[0].v)));
+  if (value >= vals[vals.length - 1].v) return 97;
   for (let i = 0; i < vals.length - 1; i++) {
     const a = vals[i], b = vals[i + 1];
-    if (weightKg >= a.v && weightKg <= b.v) {
-      const frac = (weightKg - a.v) / (b.v - a.v || 1);
+    if (value >= a.v && value <= b.v) {
+      const frac = (value - a.v) / (b.v - a.v || 1);
       return Math.round(a.c + (b.c - a.c) * frac);
     }
   }

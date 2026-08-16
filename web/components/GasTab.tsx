@@ -61,6 +61,19 @@ const localNow = () => {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 };
 const emptyForm = (): Form => ({ ph: "", co2: "", hco3: "", glu: "", lac: "", fio2: "", mode: "", note: "", takenAt: localNow() });
+
+// Offline queue: hospital basements have patchy signal. Entries that can't be
+// saved are kept on this phone (localStorage) and flushed when we're back
+// online. Numeric values only — same as the server row, no identifiers.
+type Pending = Record<string, unknown> & { taken_at: string; _localId: string };
+const QUEUE_KEY = "gas-queue-v1";
+const CACHE_KEY = "gas-cache-v1";
+const readQueue = (): Pending[] => {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch { return []; }
+};
+const writeQueue = (q: Pending[]) => {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch { /* private mode */ }
+};
 const num = (v: string) => {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : null;
@@ -102,26 +115,90 @@ export default function GasTab() {
   const [showLearn, setShowLearn] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const [pending, setPending] = useState<Pending[]>([]);
+  const [online, setOnline] = useState(true);
+
   const load = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error: err } = await supabase
       .from("gas_entries")
       .select("*")
       .eq("family_id", family.id)
       .order("taken_at");
-    setRows((data as Row[]) ?? []);
+    if (err || !data) {
+      // offline (or a hiccup): fall back to the last copy this phone saw
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) setRows(JSON.parse(cached));
+        else setRows((r) => r ?? []);
+      } catch { setRows((r) => r ?? []); }
+      return;
+    }
+    setRows(data as Row[]);
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch { /* private mode */ }
   }, [supabase, family.id]);
 
-  useEffect(() => { load(); }, [load]);
+  // push queued entries up when we can
+  const flush = useCallback(async () => {
+    const q = readQueue();
+    if (!q.length || !navigator.onLine) return;
+    const remaining: Pending[] = [];
+    for (const p of q) {
+      const { _localId, ...row } = p;
+      const { error: err } = await supabase.from("gas_entries").insert(row);
+      if (err) remaining.push(p);
+    }
+    writeQueue(remaining);
+    setPending(remaining);
+    if (remaining.length < q.length) load();
+  }, [supabase, load]);
+
+  useEffect(() => { load(); setPending(readQueue()); }, [load]);
   useRealtime(supabase, "gas_entries", family.id, load);
+  useEffect(() => {
+    setOnline(navigator.onLine);
+    const up = () => { setOnline(true); flush(); };
+    const down = () => setOnline(false);
+    window.addEventListener("online", up);
+    window.addEventListener("offline", down);
+    flush();
+    return () => { window.removeEventListener("online", up); window.removeEventListener("offline", down); };
+  }, [flush]);
 
   const setF = (k: keyof Form, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  // HEIC (and anything else the API can't take) is re-encoded to JPEG on the
+  // phone — iPhone Safari decodes HEIC natively, so a canvas round-trip does
+  // the conversion with no server dependency. Bonus: it also strips EXIF.
+  async function toJpeg(file: File): Promise<File> {
+    const ok = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (ok.includes(file.type) && file.size < 4 * 1024 * 1024) return file;
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    // cap the long edge — the printout is text, 2000px is plenty and keeps uploads small
+    const scale = Math.min(1, 2000 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    if ("close" in bitmap) bitmap.close();
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.9));
+    if (!blob) return file;
+    return new File([blob], "printout.jpg", { type: "image/jpeg" });
+  }
+
   async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const raw = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (!raw) return;
     setScanning(true); setScanMsg(""); setError("");
     try {
+      let file: File;
+      try {
+        file = await toJpeg(raw);
+      } catch {
+        throw new Error("Couldn't open that photo on this phone — try taking it with the camera button.");
+      }
       const fd = new FormData();
       fd.append("image", file);
       const res = await fetch("/api/extract", { method: "POST", body: fd });
@@ -170,15 +247,40 @@ export default function GasTab() {
       note: form.note.trim() || null,
       source: scanMsg ? "photo" : "manual",
     };
+    // interpret first — the read never depends on the network
+    const local: Row = {
+      id: `local-${Date.now()}`, taken_at: insert.taken_at, ph, co2_kpa: co2,
+      hco3_std: insert.hco3_std, glucose: insert.glucose, lactate: insert.lactate, fio2_pct: insert.fio2_pct,
+      support_mode: insert.support_mode as SupportMode | null, sample_no: null, note: insert.note, source: insert.source, created_by: profile.id,
+    };
+    const prevRow = [...(rows ?? [])].filter((r) => r.taken_at < local.taken_at).sort((a, b) => a.taken_at.localeCompare(b.taken_at)).at(-1) ?? null;
+    const reading = interpret(toEntry(local), prevRow ? toEntry(prevRow) : null);
+
+    const queueIt = () => {
+      const q = readQueue();
+      q.push({ ...insert, _localId: local.id });
+      writeQueue(q);
+      setPending(q);
+      setResult({ ...reading, row: local });
+      setForm(emptyForm());
+      setScanMsg("");
+      setError("");
+      setBusy(false);
+    };
+
+    if (!navigator.onLine) return queueIt();
+
     const { data, error: err } = await supabase.from("gas_entries").insert(insert).select("*").single();
     setBusy(false);
     if (err || !data) {
-      setError(/gas_entries/.test(err?.message ?? "") ? "The gas guide isn't switched on in the database yet — run migration 028." : err?.message ?? "Couldn't save.");
-      return;
+      const msg = err?.message ?? "";
+      if (/gas_entries/.test(msg)) return setError("The gas guide isn't switched on in the database yet — run migration 028.");
+      // a network-shaped failure (fetch failed / timeout) → keep it on the phone, sync later
+      if (/fetch|network|timeout|failed to/i.test(msg) || !msg) return queueIt();
+      return setError(msg);
     }
     const saved = data as Row;
-    const prevRow = [...(rows ?? [])].filter((r) => r.taken_at < saved.taken_at).sort((a, b) => a.taken_at.localeCompare(b.taken_at)).at(-1) ?? null;
-    setResult({ ...interpret(toEntry(saved), prevRow ? toEntry(prevRow) : null), row: saved });
+    setResult({ ...reading, row: saved });
     setForm(emptyForm());
     setScanMsg("");
     load();
@@ -242,6 +344,15 @@ export default function GasTab() {
           <b>This is for understanding, not decisions.</b> One gas is a snapshot; the team weighs the trend, breathing effort and how your baby looks. When in doubt — ask the nurses. They&apos;d always rather explain than have you worry.
         </div>
       </div>
+
+      {(!online || pending.length > 0) && (
+        <p className="note" style={{ borderColor: "var(--sky)" }} role="status">
+          {!online ? "📵 No signal right now — " : "☁️ "}
+          {pending.length > 0
+            ? `${pending.length} sample${pending.length > 1 ? "s" : ""} saved on this phone, will sync when you're back online.`
+            : "you can still log a sample and read it; it'll sync when you're back online."}
+        </p>
+      )}
 
       {/* photo scan */}
       <label className={`card gas-drop ${scanning ? "busy" : ""}`}>
@@ -332,6 +443,24 @@ export default function GasTab() {
               <Sparkline points={trend.map((r) => (r.fio2_pct == null ? null : Number(r.fio2_pct)))} min={21} max={60} refLo={21} refHi={30} fmt={(v) => `${v}%`} colour="var(--sky)" />
             </>
           )}
+        </div>
+      )}
+
+      {/* queued (not yet synced) */}
+      {pending.length > 0 && (
+        <div className="card">
+          <h2>Waiting to sync <span className="muted">· {pending.length}</span></h2>
+          <ul className="gas-list">
+            {pending.map((p) => (
+              <li key={p._localId}>
+                <span className="gas-row" style={{ cursor: "default" }}>
+                  <span className="gas-dot small band-soft" aria-hidden="true" />
+                  <span className="gas-when">{fmtStamp(p.taken_at)}</span>
+                  <span className="gas-vals">pH {Number(p.ph).toFixed(3)} · CO₂ {Number(p.co2_kpa).toFixed(1)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

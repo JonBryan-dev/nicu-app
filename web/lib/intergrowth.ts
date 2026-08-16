@@ -1,17 +1,35 @@
 // lib/intergrowth.ts — INTERGROWTH-21st Preterm Postnatal Growth Standards
-// (Villar et al., Lancet Global Health 2015), weight-for-age, GIRLS.
+// (Villar et al., Lancet Global Health 2015), GIRLS: weight-for-age (kg),
+// length-for-age (cm), head-circumference-for-age (cm).
 // Unlike Fenton (built from sizes AT birth — an intrauterine reference), these
 // follow healthy preterm babies AFTER birth: the realistic comparison group.
 // Valid 27–64 weeks postmenstrual age; cohort born ≥26 weeks gestation.
-// Parametric standard: weight(kg) = exp(mu + z·sigma). Coefficients as
-// published (via the rOpenSci `gigs` package, data-raw/R/ig_png.R), verified
-// here against the official percentile tables to within 6 g. Open access.
+// Parametric standards: weight & length are log-normal (value = exp(mu+z·sigma)),
+// head circumference is normal (value = mu+z·sigma). Coefficients as published
+// (via the rOpenSci `gigs` package, R/ig_png.R), verified here against the
+// official percentile tables to within 6 g / 0.06 cm. Open access.
+import type { Measure } from "./fenton";
+
 export const IG_FROM = 27;
 export const IG_TO = 64;
 
-const mu = (x: number) => 2.591277 - 0.01155 * Math.sqrt(x) - 2201.705 / (x * x);
-const sigma = (x: number) =>
-  0.1470258 + 505.92394 / (x * x) - (140.0576 / (x * x)) * Math.log(x);
+const PARAMS: Record<Measure, { mu: (x: number) => number; sigma: (x: number) => number; log: boolean }> = {
+  weight: {
+    mu: (x) => 2.591277 - 0.01155 * Math.sqrt(x) - 2201.705 / (x * x),
+    sigma: (x) => 0.1470258 + 505.92394 / (x * x) - (140.0576 / (x * x)) * Math.log(x),
+    log: true,
+  },
+  length: {
+    mu: (x) => 4.136244 - 547.0018 / (x * x) + 0.0026066 * x,
+    sigma: (x) => 0.050489 + 310.44761 / (x * x) - (90.0742 / (x * x)) * Math.log(x),
+    log: true,
+  },
+  hc: {
+    mu: (x) => 55.53617 - 852.0059 / x,
+    sigma: (x) => 3.0582292 + 3910.05 / (x * x) - 180.5625 / x,
+    log: false,
+  },
+};
 
 const Z: Record<number, number> = {
   3: -1.880794,
@@ -21,16 +39,20 @@ const Z: Record<number, number> = {
   97: 1.880794,
 };
 
-/** Weight (kg) on a centile curve at a (fractional) PMA in weeks. */
-export function igCurveAt(centile: number, pmaWeeks: number): number {
+/** Value on a centile curve at a (fractional) PMA in weeks. */
+export function igCurveAt(centile: number, pmaWeeks: number, measure: Measure = "weight"): number {
   const x = Math.min(Math.max(pmaWeeks, IG_FROM), IG_TO);
-  return Math.exp(mu(x) + (Z[centile] ?? 0) * sigma(x));
+  const p = PARAMS[measure];
+  const y = p.mu(x) + (Z[centile] ?? 0) * p.sigma(x);
+  return p.log ? Math.exp(y) : y;
 }
 
 /** Exact centile (1–99, clamped) from the published distribution. */
-export function igCentileFor(weightKg: number, pmaWeeks: number): number {
+export function igCentileFor(value: number, pmaWeeks: number, measure: Measure = "weight"): number {
   const x = Math.min(Math.max(pmaWeeks, IG_FROM), IG_TO);
-  const z = (Math.log(weightKg) - mu(x)) / sigma(x);
+  const p = PARAMS[measure];
+  const y = p.log ? Math.log(value) : value;
+  const z = (y - p.mu(x)) / p.sigma(x);
   return Math.min(99, Math.max(1, Math.round(normCdf(z) * 100)));
 }
 
