@@ -42,6 +42,16 @@ import {
 
 const CACHE_KEY = "evidence-cache-v1";
 type Cached = { reviews: Review[]; fetchedAt: string };
+/** A question he's marked as asked, and what the team said back. */
+type AskedNote = {
+  id: string;
+  kind: "question" | "pin";
+  topic: string | null;
+  ref: string | null;
+  title: string;
+  body: string | null;
+  created_at: string;
+};
 
 const readCache = (): Cached | null => {
   try {
@@ -139,21 +149,28 @@ export default function EvidenceTab() {
   // ---------- her timeline ----------
   const [gases, setGases] = useState<{ taken_at: string; support_mode: SupportMode | null }[]>([]);
   const [logged, setLogged] = useState<RespEventRow[]>([]);
+  const [notes, setNotes] = useState<AskedNote[]>([]);
+  const [draft, setDraft] = useState<Record<string, string>>({});
   const [form, setForm] = useState({ kind: "extubation" as EventKind, at: localNow(), detail: "", note: "" });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
   const loadTimeline = useCallback(async () => {
-    const [g, e] = await Promise.all([
+    const [g, e, n] = await Promise.all([
       supabase
         .from("gas_entries")
         .select("taken_at, support_mode")
         .eq("family_id", family.id)
         .order("taken_at"),
       supabase.from("resp_events").select("id, kind, at, detail, note").order("at"),
+      supabase
+        .from("evidence_notes")
+        .select("id, kind, topic, ref, title, body, created_at")
+        .order("created_at", { ascending: false }),
     ]);
     if (g.data) setGases(g.data as { taken_at: string; support_mode: SupportMode | null }[]);
     if (e.data) setLogged(e.data as RespEventRow[]);
+    if (n.data) setNotes(n.data as AskedNote[]);
   }, [supabase, family.id]);
 
   useEffect(() => {
@@ -161,6 +178,30 @@ export default function EvidenceTab() {
   }, [loadTimeline]);
   useRealtime(supabase, "resp_events", family.id, loadTimeline);
   useRealtime(supabase, "gas_entries", family.id, loadTimeline);
+  useRealtime(supabase, "evidence_notes", family.id, loadTimeline);
+
+  // ---------- questions he's actually put to the team ----------
+  async function askQuestion(topic: string, ref: string, title: string) {
+    await supabase
+      .from("evidence_notes")
+      .insert({ family_id: family.id, author_id: profile.id, kind: "question", topic, ref, title });
+    loadTimeline();
+  }
+
+  async function saveAnswer(id: string, body: string) {
+    await supabase.from("evidence_notes").update({ body: body.trim() || null }).eq("id", id);
+    setDraft((d) => {
+      const next = { ...d };
+      delete next[id];
+      return next;
+    });
+    loadTimeline();
+  }
+
+  async function removeNote(id: string) {
+    await supabase.from("evidence_notes").delete().eq("id", id);
+    loadTimeline();
+  }
 
   const ladder = useMemo(() => ladderFromGases(gases), [gases]);
   const events = useMemo(() => mergeEvents(derivedEvents(ladder), logged), [ladder, logged]);
@@ -264,6 +305,46 @@ export default function EvidenceTab() {
             <p className="note">{COHORT_NOTE}</p>
           </div>
 
+          {notes.length > 0 && (
+            <div className="card">
+              <div className="gas-kicker">{notes.length} to ask</div>
+              <h2>Your list for the team</h2>
+              <p className="note">
+                Take this to the next ward round. Write down what they say — in six weeks you
+                won&apos;t remember, and their answer about her beats anything on this tab.
+              </p>
+              <ul className="ev-list">
+                {notes.map((n) => (
+                  <li key={n.id}>
+                    <b>{n.title}</b>
+                    {n.body ? (
+                      <p style={{ whiteSpace: "pre-wrap", margin: "6px 0 0" }}>{n.body}</p>
+                    ) : (
+                      <textarea
+                        rows={2}
+                        placeholder="What did they say?"
+                        aria-label={`What the team said about: ${n.title}`}
+                        value={draft[n.id] ?? ""}
+                        onChange={(e) => setDraft({ ...draft, [n.id]: e.target.value })}
+                        style={{ marginTop: 6 }}
+                      />
+                    )}
+                    <div className="row" style={{ marginTop: 4 }}>
+                      {!n.body && (draft[n.id] ?? "").trim() && (
+                        <button className="tiny" onClick={() => saveAnswer(n.id, draft[n.id])}>
+                          save their answer
+                        </button>
+                      )}
+                      <button className="tiny" onClick={() => removeNote(n.id)}>
+                        remove
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="row" style={{ alignItems: "center", margin: "0 0 12px" }}>
             <span className="muted" style={{ flex: 1 }}>
               {live && fetchedAt
@@ -313,12 +394,22 @@ export default function EvidenceTab() {
                       <details>
                         <summary className="muted">Questions this raises for the team</summary>
                         <ul className="ev-list">
-                          {questionsFor(r, cd).map((q) => (
-                            <li key={q.id}>
-                              <b>{q.q}</b>
-                              <div className="ev-sub">{q.why}</div>
-                            </li>
-                          ))}
+                          {questionsFor(r, cd).map((q) => {
+                            const asked = notes.some((n) => n.ref === q.id);
+                            return (
+                              <li key={q.id}>
+                                <b>{q.q}</b>
+                                <div className="ev-sub">{q.why}</div>
+                                <button
+                                  className="tiny"
+                                  disabled={asked}
+                                  onClick={() => askQuestion(topic.id, q.id, q.q)}
+                                >
+                                  {asked ? "on your list ✓" : "add to my list"}
+                                </button>
+                              </li>
+                            );
+                          })}
                         </ul>
                       </details>
                       <div className="muted" style={{ marginTop: 6 }}>
