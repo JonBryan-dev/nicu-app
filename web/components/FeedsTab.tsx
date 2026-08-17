@@ -13,6 +13,8 @@ import {
   babyFeedsPerDay,
   fmtHM,
   DEFAULT_SETTINGS,
+  POWER_PUMP_TIME,
+  withDefaults,
   type FeedSettingsRow,
   type SleepWindowRow,
   type SlotRow,
@@ -107,7 +109,7 @@ export default function FeedsTab() {
         .eq("slot_date", dayKey),
       supabase.from("expressing_logs").select("ml, at").eq("family_id", family.id).gte("at", weekAgoIso),
     ]);
-    if (st.data) setSettings({ ...DEFAULT_SETTINGS, ...st.data });
+    if (st.data) setSettings(withDefaults(st.data));
     setWindows((sw.data as SleepWindowRow[]) ?? []);
     const allFeeds = (fd.data as FeedRecord[]) ?? [];
     setFeeds(allFeeds.filter((f) => f.started_at >= dayStartIso));
@@ -434,6 +436,8 @@ export default function FeedsTab() {
             </div>
             <p className="muted" style={{ marginTop: 6 }}>
               Power pump runs an hour of pump/rest intervals to nudge supply up.
+              It&apos;s pinned to {POWER_PUMP_TIME} — first thing, and it counts as one
+              of the day&apos;s sessions.
             </p>
             {showPast && (
               <form onSubmit={logPastFeed} style={{ marginTop: 10 }}>
@@ -645,8 +649,8 @@ export default function FeedsTab() {
             <h3>Your pumping</h3>
             <div className="row rowwrap">
               <div>
-                <label>Minimum pumps in 24h</label>
-                <select value={settings.feeds_per_day ?? 8} onChange={(e) => saveSettings({ feeds_per_day: +e.target.value })}>
+                <label>Pumps in 24h (power pump included)</label>
+                <select value={settings.feeds_per_day ?? DEFAULT_SETTINGS.feeds_per_day ?? 9} onChange={(e) => saveSettings({ feeds_per_day: +e.target.value })}>
                   {[6, 7, 8, 9, 10, 11, 12].map((n) => (
                     <option key={n} value={n}>{n} pumps</option>
                   ))}

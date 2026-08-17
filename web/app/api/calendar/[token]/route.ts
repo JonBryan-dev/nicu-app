@@ -6,7 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   computeSchedule,
   babyFeedTimes,
-  DEFAULT_SETTINGS,
+  withDefaults,
   type FeedSettingsRow,
   type SleepWindowRow,
   type FeedRow,
@@ -89,7 +89,7 @@ export async function GET(
 
   const feed = data as FeedPayload;
   const baby = feed.baby_name;
-  const settings = feed.settings ?? DEFAULT_SETTINGS;
+  const settings = withDefaults(feed.settings);
   const events: string[] = [];
 
   // shift everything onto London wall-clock (see londonOffsetMs)
