@@ -4,7 +4,10 @@ export type ListType = "daily" | "weekly" | "wellbeing_mum" | "wellbeing_dad" | 
 export type ShiftAssignee = "both" | "mum" | "dad" | "family" | "rest";
 
 export interface Family { id: string; baby_name: string; baby_dob: string; parent_code?: string; family_code?: string; team_code?: string; calendar_token?: string; gestation_days?: number | null; }
-export interface Profile { id: string; family_id: string; display_name: string; role: Role; }
+// parent_kind is descriptive, never a permission — it only decides which parent
+// is offered their own corner of the app (see migration 031).
+export type ParentKind = "mum" | "dad";
+export interface Profile { id: string; family_id: string; display_name: string; role: Role; parent_kind?: ParentKind | null; }
 export interface Update { id: string; family_id: string; author_id: string; body: string; is_milestone: boolean; milestone_label?: string | null; image_paths?: string[]; created_at: string; author?: Profile; }
 export interface CareLog { id: string; family_id: string; logged_by: string | null; log_date: string; weight_grams: number | null; length_cm?: number | null; head_cm?: number | null; feeds_note: string | null; created_at: string; }
 
@@ -23,6 +26,11 @@ export interface ChecklistItem { id: string; family_id: string; list_type: ListT
 export interface SupportTask { id: string; family_id: string; task_text: string; claimed_by: string | null; at_hospital?: boolean; slot_id?: string | null; created_at: string; claimer?: Profile | null; }
 export interface VisitSlot { id: string; family_id: string; slot_date: string; start_time: string; end_time: string; booked_by: string | null; booked_name?: string | null; booker?: Profile | null; }
 export interface ShiftBlock { family_id: string; week_key: string; day_name: "Mon"|"Tue"|"Wed"|"Thu"|"Fri"|"Sat"|"Sun"; block_name: "AM"|"PM"|"Eve"; assignee: ShiftAssignee; }
+
+// Private to their author (migration 032) — one parent's own respiratory log
+// and their record of what they asked the team.
+export interface RespEvent { id: string; family_id: string; author_id: string; kind: string; at: string; detail: string | null; note: string | null; created_at: string; }
+export interface EvidenceNote { id: string; family_id: string; author_id: string; kind: "question" | "pin"; topic: string | null; ref: string | null; title: string; body: string | null; created_at: string; }
 
 // Period keys (compute in Europe/London)
 export const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] as const;

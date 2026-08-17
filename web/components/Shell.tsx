@@ -51,6 +51,9 @@ const TABS = [
   { href: "/journal", label: "Journal", icon: "📓", parentOnly: true },
   { href: "/feeds", label: "Feeds", icon: "🍼", parentOnly: true },
   { href: "/gas", label: "Gas", icon: "🩸", parentOnly: true },
+  // Dad's own corner. Hidden unless he's said he's dad; what he logs behind it
+  // is private to him by RLS, not by this flag.
+  { href: "/evidence", label: "Lungs", icon: "🫁", parentOnly: true, dadOnly: true },
   { href: "/lists", label: "Lists", icon: "☑️", parentOnly: true },
   { href: "/support", label: "Support", icon: "💛" },
   { href: "/visits", label: "Visits", icon: "📅" },
@@ -64,6 +67,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [showCodes, setShowCodes] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
+  const [showWho, setShowWho] = useState(false);
+  const [whoMsg, setWhoMsg] = useState("");
   const [members, setMembers] = useState<(Profile & { created_at?: string })[]>([]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameVal, setRenameVal] = useState("");
@@ -159,6 +164,21 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     setPwMsg("Done — next time you can sign in with your email and password.");
   }
 
+  // Mum or dad. Descriptive only — it decides which parent is offered their own
+  // corner of the app (the Lungs tab), never what anyone is allowed to read.
+  async function saveParentKind(kind: "mum" | "dad" | null) {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ parent_kind: kind })
+      .eq("id", profile.id);
+    if (error) {
+      setWhoMsg(error.message);
+      return;
+    }
+    setWhoMsg("Saved.");
+    router.refresh();
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     router.replace("/login");
@@ -187,6 +207,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             </>
           )}
           <button onClick={() => setShowTheme((s) => !s)}>appearance</button> ·{" "}
+          {isParent && (
+            <>
+              <button onClick={() => setShowWho((s) => !s)}>who I am</button> ·{" "}
+            </>
+          )}
           <button onClick={() => setShowPw((s) => !s)}>password</button> ·{" "}
           <button onClick={signOut}>sign out</button>
           {isParent && (
@@ -201,6 +226,48 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       <ParentPresence />
 
       {showTheme && <ThemePicker />}
+
+      {showWho && isParent && (
+        <div className="card">
+          <h2>Which parent are you?</h2>
+          <p className="note">
+            Only you can set this, and it changes nothing about what anyone can
+            see of {family.baby_name.split(" ")[0]}&apos;s space. It just lets
+            one of you have a corner of the app that&apos;s yours.
+          </p>
+          <div className="rolepick">
+            <button
+              type="button"
+              className={profile.parent_kind === "mum" ? "on" : ""}
+              onClick={() => saveParentKind("mum")}
+            >
+              I&apos;m Mum
+            </button>
+            <button
+              type="button"
+              className={profile.parent_kind === "dad" ? "on" : ""}
+              onClick={() => saveParentKind("dad")}
+            >
+              I&apos;m Dad
+            </button>
+          </div>
+          {profile.parent_kind && (
+            <button
+              type="button"
+              className="tiny"
+              style={{ marginTop: 8 }}
+              onClick={() => saveParentKind(null)}
+            >
+              clear
+            </button>
+          )}
+          {whoMsg && (
+            <p className="muted" style={{ marginTop: 8 }}>
+              {whoMsg}
+            </p>
+          )}
+        </div>
+      )}
 
       {showPw && (
         <div className="card">
@@ -369,7 +436,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       </div>
       <nav className="tabs" aria-label="Sections">
         {TABS.filter((t) =>
-          profile.role === "team" ? t.href === "/" : isParent || !t.parentOnly
+          profile.role === "team"
+            ? t.href === "/"
+            : (isParent || !t.parentOnly) &&
+              (!t.dadOnly || profile.parent_kind === "dad")
         ).map((t) => (
           <Link
             key={t.href}

@@ -17,6 +17,9 @@ type Ctx = {
   profile: Profile;
   family: Family;
   isParent: boolean;
+  /** Whether this parent has said they're dad — decides only whether the Lungs
+   *  tab is offered. Everything private behind it is enforced by RLS. */
+  isDad: boolean;
 };
 
 const FamilyCtx = createContext<Ctx | null>(null);
@@ -44,6 +47,7 @@ export function FamilyProvider({
       profile,
       family,
       isParent: profile.role === "parent",
+      isDad: profile.role === "parent" && profile.parent_kind === "dad",
     }),
     [supabase, profile, family]
   );

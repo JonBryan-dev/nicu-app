@@ -368,6 +368,9 @@ a {
 }
 .tabs a {
   flex: 1;
+  /* nine tabs have to share 560px — let them shrink below their label width
+     rather than pushing the bar wider than the content column */
+  min-width: 0;
   border: 1px solid var(--mist);
   background: var(--card);
   border-radius: 999px;
@@ -459,6 +462,7 @@ input[type="email"],
 input[type="password"],
 input[type="date"],
 input[type="time"],
+input[type="datetime-local"],
 textarea {
   width: 100%;
   border: 1px solid var(--mist);
@@ -1475,6 +1479,64 @@ select {
   .composer-row button.primary {
     width: auto;
   }
+}
+
+/* ---------- Lungs tab (dad's evidence corner) ---------- */
+/* prose lists — .gas-list is monospace, which is right for numbers and wrong
+   for sentences */
+.ev-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.ev-list li {
+  border-top: 1px solid var(--mist);
+  padding: 10px 2px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.ev-list li:first-child {
+  border-top: none;
+}
+.ev-sub {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  margin-top: 3px;
+}
+/* authors' conclusions, quoted verbatim — a quotation, not a notice, so it
+   gets a margin rule rather than the tinted .gas-banner treatment */
+.ev-quote {
+  border-left: 3px solid var(--sage);
+  margin: 8px 0;
+  padding: 4px 0 4px 12px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.ev-list summary,
+.card details > summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+/* the six-rung support ladder, top (ventilator) to bottom (air) */
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 10px 0 4px;
+}
+.ladder-rung {
+  border: 1px solid var(--mist);
+  border-radius: 10px;
+  padding: 7px 10px;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  background: var(--card);
+}
+.ladder-rung.on {
+  border-color: var(--rose-deep);
+  color: var(--ink);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--rose) 14%, var(--card));
 }
 
 @media (prefers-reduced-motion: reduce) {
