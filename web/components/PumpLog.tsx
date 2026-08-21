@@ -11,9 +11,17 @@ const DAYS_BACK = 21;
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const WDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
-type Sess = { time: Date; ml: number | null; left: number | null; right: number | null; mins: number | null };
-type FeedRow = { started_at: string; ended_at: string | null; ml: number | null; ml_left: number | null; ml_right: number | null };
-type ExRow = { ml: number; at: string };
+type Sess = {
+  id: string;
+  src: "feeds" | "expressing_logs"; // which table the row lives in
+  time: Date;
+  ml: number | null;
+  left: number | null;
+  right: number | null;
+  mins: number | null;
+};
+type FeedRow = { id: string; started_at: string; ended_at: string | null; ml: number | null; ml_left: number | null; ml_right: number | null };
+type ExRow = { id: string; ml: number; at: string };
 
 const dayKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -42,11 +50,11 @@ export default function PumpLog({ supabase, familyId }: { supabase: SupabaseClie
     const [fd, ex] = await Promise.all([
       supabase
         .from("feeds")
-        .select("started_at, ended_at, ml, ml_left, ml_right")
+        .select("id, started_at, ended_at, ml, ml_left, ml_right")
         .eq("family_id", familyId)
         .eq("method", "pump")
         .gte("started_at", iso),
-      supabase.from("expressing_logs").select("ml, at").eq("family_id", familyId).gte("at", iso),
+      supabase.from("expressing_logs").select("id, ml, at").eq("family_id", familyId).gte("at", iso),
     ]);
     setFeeds((fd.data as FeedRow[]) ?? []);
     setExpr((ex.data as ExRow[]) ?? []);
@@ -58,6 +66,15 @@ export default function PumpLog({ supabase, familyId }: { supabase: SupabaseClie
   useRealtime(supabase, "feeds", familyId, load);
   useRealtime(supabase, "expressing_logs", familyId, load);
 
+  // sessions saved to the wrong day (easy to do overnight) have no other
+  // edit surface — the Feeds grid only covers today, so the fix lives here
+  async function remove(s: Sess) {
+    const when = `${dayLabel(dayKey(s.time)).toLowerCase()} ${hhmm(s.time)}`;
+    if (!window.confirm(`Delete the ${when} session${s.ml != null ? ` (${s.ml} ml)` : ""}? This can't be undone.`)) return;
+    await supabase.from(s.src).delete().eq("id", s.id);
+    load();
+  }
+
   const days = useMemo(() => {
     const map = new Map<string, Sess[]>();
     const push = (time: Date, s: Sess) => {
@@ -68,9 +85,10 @@ export default function PumpLog({ supabase, familyId }: { supabase: SupabaseClie
     for (const f of feeds) {
       const t = new Date(f.started_at);
       const mins = f.ended_at ? Math.round((+new Date(f.ended_at) - +t) / 60000) : 0;
-      push(t, { time: t, ml: f.ml, left: f.ml_left, right: f.ml_right, mins: mins > 0 ? mins : null });
+      push(t, { id: f.id, src: "feeds", time: t, ml: f.ml, left: f.ml_left, right: f.ml_right, mins: mins > 0 ? mins : null });
     }
-    for (const r of expr) push(new Date(r.at), { time: new Date(r.at), ml: r.ml, left: null, right: null, mins: null });
+    for (const r of expr)
+      push(new Date(r.at), { id: r.id, src: "expressing_logs", time: new Date(r.at), ml: r.ml, left: null, right: null, mins: null });
     return Array.from(map.entries())
       .map(([key, ss]) => {
         ss.sort((a, b) => +b.time - +a.time);
@@ -85,7 +103,7 @@ export default function PumpLog({ supabase, familyId }: { supabase: SupabaseClie
     <div className="card">
       <h2>Pumping log</h2>
       <p className="muted" style={{ marginBottom: 6 }}>
-        Every session, day by day — tap a day for the times and amounts.
+        Every session, day by day — tap a day for the times and amounts. ✕ removes one logged by mistake.
       </p>
       {days.map((d, i) => (
         <details key={d.key} className="logday" open={i === 0}>
@@ -96,14 +114,23 @@ export default function PumpLog({ supabase, familyId }: { supabase: SupabaseClie
             </span>
           </summary>
           <ul className="loglist">
-            {d.sessions.map((s, j) => (
-              <li key={j}>
+            {d.sessions.map((s) => (
+              <li key={s.id}>
                 <span className="logt">{hhmm(s.time)}</span>
                 <span className="logml">{s.ml != null ? `${s.ml} ml` : "—"}</span>
                 {(s.left != null || s.right != null) && (
                   <span className="logside">L {s.left ?? 0} · R {s.right ?? 0}</span>
                 )}
                 {s.mins != null && <span className="logmin">{s.mins} min</span>}
+                <button
+                  type="button"
+                  className="tiny"
+                  style={{ marginLeft: s.mins != null ? undefined : "auto", flex: "0 0 auto" }}
+                  onClick={() => remove(s)}
+                  aria-label={`Delete the ${hhmm(s.time)} session`}
+                >
+                  ✕
+                </button>
               </li>
             ))}
           </ul>
