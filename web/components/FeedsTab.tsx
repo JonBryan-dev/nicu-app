@@ -556,8 +556,9 @@ export default function FeedsTab() {
                               : null,
                           ].filter(Boolean).join(" · ")
                         : [
-                            s.power ? "power pump — fixed, use the 💪 button" : null,
-                            s.assigned === "pre-sleep"
+                            s.power ? "power pump — first one after waking, use the 💪 button" : null,
+                            s.power ? null
+                            : s.assigned === "pre-sleep"
                               ? "last one before Mum's sleep 😴"
                               : s.assigned === "post-sleep"
                                 ? "first one after waking ☀️"
