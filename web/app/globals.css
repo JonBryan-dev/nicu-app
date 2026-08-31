@@ -435,7 +435,8 @@ button.primary:disabled {
   opacity: 0.6;
   cursor: default;
 }
-button.ghost {
+button.ghost,
+a.ghost {
   background: none;
   border: 1px solid var(--mist);
   border-radius: 12px;
@@ -444,6 +445,8 @@ button.ghost {
   color: var(--ink-soft);
   cursor: pointer;
   white-space: nowrap;
+  text-decoration: none;
+  display: inline-block;
 }
 button.tiny {
   background: none;

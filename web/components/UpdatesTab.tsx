@@ -2,6 +2,7 @@
 // Updates — dotted-thread feed with photos, milestone "firsts", and guided
 // diary prompts. Parents compose; family reads. Push is handled by DB triggers.
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useFamily } from "@/components/FamilyProvider";
 import { useRealtime } from "@/lib/useRealtime";
 import { fmtStamp, todayKey } from "@/lib/dates";
@@ -240,6 +241,13 @@ export default function UpdatesTab() {
 
   return (
     <section>
+      {profile.role === "family" && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+          <Link className="ghost" href="/visits">
+            📅 Book a visit
+          </Link>
+        </div>
+      )}
       {canPost && (
         <form className="card" onSubmit={post}>
           <h2>Share an update</h2>
