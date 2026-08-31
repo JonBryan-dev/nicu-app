@@ -111,25 +111,19 @@ export default function VisitsTab() {
     loadRequests();
   }
 
-  // parents: approve = open a slot at that time and book them straight in
-  // (the slot-booking notification tells everyone); decline is quiet.
+  // parents: approve = open the slot, book them in and push *them* a
+  // "your visit is confirmed" — all in one database call so it can't
+  // half-finish. Decline stays quiet; they see the status here.
   async function approveRequest(r: VisitRequest) {
-    const { data: slot, error } = await supabase
-      .from("visit_slots")
-      .insert({
-        family_id: family.id,
-        slot_date: r.req_date,
-        start_time: r.start_time,
-        end_time: r.end_time,
-      })
-      .select("id")
-      .single();
-    if (error || !slot) {
-      alert(error?.message ?? "Couldn't open the slot.");
+    const { error } = await supabase.rpc("approve_visit_request", { p_id: r.id });
+    if (error) {
+      alert(
+        /approve_visit_request/.test(error.message)
+          ? "Approvals need the latest database migration (033) — run it and try again."
+          : error.message
+      );
       return;
     }
-    await supabase.from("visit_slots").update({ booked_by: r.requested_by }).eq("id", slot.id);
-    await supabase.from("visit_requests").update({ status: "approved" }).eq("id", r.id);
     load();
     loadRequests();
   }
