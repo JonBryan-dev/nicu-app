@@ -444,9 +444,6 @@ export default function FeedsTab() {
                 Log a past one
               </button>
             </div>
-            <p className="muted" style={{ marginTop: 6 }}>
-              Power pump runs an hour of pump/rest intervals to nudge supply up.
-            </p>
             {showPast && (
               <form onSubmit={logPastFeed} style={{ marginTop: 10 }}>
                 <div className="row rowwrap">
@@ -507,9 +504,6 @@ export default function FeedsTab() {
         <h2>Your pumping today</h2>
         <p className="muted" style={{ marginBottom: 6 }}>
           Day gaps ≈ {Math.round(gaps.dayGap / 6) / 10}h · overnight {Math.round(gaps.nightGap / 6) / 10}h
-          {schedule.some((s) => s.at.getDate() !== new Date().getDate()) && (
-            <> · <b>+1</b> = after midnight, still tonight&apos;s plan</>
-          )}
         </p>
         {schedule.length === 0 ? (
           <div className="empty">Start the first pump and today&apos;s plan appears here.</div>
@@ -541,9 +535,6 @@ export default function FeedsTab() {
                     <span className="t">
                       {s.logged ? "✓" : "·"} {fmtHM(s.at)}
                       {s.power && <span aria-hidden="true"> 💪</span>}
-                      {s.at.getDate() !== new Date().getDate() && (
-                        <span className="muted" style={{ fontWeight: 600 }}> +1</span>
-                      )}
                     </span>
                     <span className="info" style={{ flex: 1 }}>
                       {s.logged
@@ -556,9 +547,7 @@ export default function FeedsTab() {
                               : null,
                           ].filter(Boolean).join(" · ")
                         : [
-                            s.power ? "power pump — first one after waking, use the 💪 button" : null,
-                            s.power ? null
-                            : s.assigned === "pre-sleep"
+                            s.assigned === "pre-sleep"
                               ? "last one before Mum's sleep 😴"
                               : s.assigned === "post-sleep"
                                 ? "first one after waking ☀️"

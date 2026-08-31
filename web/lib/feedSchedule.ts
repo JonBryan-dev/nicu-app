@@ -243,11 +243,16 @@ export function computeSchedule(
     anchor.setHours(h, m, 0, 0);
   }
 
-  // project forward until tomorrow's day_from
+  // pumping stays on the plain 24-hour clock — today's plan ends at midnight;
+  // the legacy feeds branch still projects to tomorrow's day_from
   const endOfDay = new Date(now);
   endOfDay.setDate(endOfDay.getDate() + 1);
-  const [eh, em] = settings.day_from.split(":").map(Number);
-  endOfDay.setHours(eh, em, 0, 0);
+  if (pumping) {
+    endOfDay.setHours(0, 0, 0, 0);
+  } else {
+    const [eh, em] = settings.day_from.split(":").map(Number);
+    endOfDay.setHours(eh, em, 0, 0);
+  }
 
   // planned first session when nothing's logged yet and the day hasn't started
   if (!sorted.length && anchor > now) {
@@ -297,11 +302,9 @@ export function computeSchedule(
       planned = project(dayGap);
     }
 
-    // The power pump is the FIRST session after Mum wakes — supply is at its
-    // highest then. It isn't pinned to a clock time: it rides on the end of
-    // her overnight sleep window, so the after-waking entry (early hours, +1)
-    // carries the 💪 badge, and a logged "Power pump" session keeps its badge
-    // at whatever time it actually happened.
+    // a logged "Power pump" session keeps its 💪 badge at whatever time it
+    // actually happened; nothing planned is pinned — Mum starts one with the
+    // 💪 button whenever it suits
     for (const f of sorted) {
       if (!(f.note ?? "").includes("Power pump")) continue;
       const done = entries.find(
@@ -309,10 +312,6 @@ export function computeSchedule(
       );
       if (done) done.power = true;
     }
-    const wake = planned.find(
-      (p) => p.assigned === "post-sleep" && p.at.getDate() !== now.getDate()
-    );
-    if (wake) wake.power = true;
     entries.push(...planned);
     return entries;
   }
