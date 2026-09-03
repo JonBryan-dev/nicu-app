@@ -111,25 +111,19 @@ export default function VisitsTab() {
     loadRequests();
   }
 
-  // parents: approve = open a slot at that time and book them straight in
-  // (the slot-booking notification tells everyone); decline is quiet.
+  // parents: approve = open the slot, book them in and push *them* a
+  // "your visit is confirmed" — all in one database call so it can't
+  // half-finish. Decline stays quiet; they see the status here.
   async function approveRequest(r: VisitRequest) {
-    const { data: slot, error } = await supabase
-      .from("visit_slots")
-      .insert({
-        family_id: family.id,
-        slot_date: r.req_date,
-        start_time: r.start_time,
-        end_time: r.end_time,
-      })
-      .select("id")
-      .single();
-    if (error || !slot) {
-      alert(error?.message ?? "Couldn't open the slot.");
+    const { error } = await supabase.rpc("approve_visit_request", { p_id: r.id });
+    if (error) {
+      alert(
+        /approve_visit_request/.test(error.message)
+          ? "Approvals need the latest database migration (033) — run it and try again."
+          : error.message
+      );
       return;
     }
-    await supabase.from("visit_slots").update({ booked_by: r.requested_by }).eq("id", slot.id);
-    await supabase.from("visit_requests").update({ status: "approved" }).eq("id", r.id);
     load();
     loadRequests();
   }
@@ -476,6 +470,75 @@ export default function VisitsTab() {
         </div>
       )}
 
+      {!isParent && profile.role === "family" && (
+        <div className="card">
+          <h2>Book a visit</h2>
+          {!showReq ? (
+            <>
+              <p className="note">
+                Grab any free space below — or ask for a day and time that
+                suits you, and Mum &amp; Dad can approve it with one tap.
+              </p>
+              <button className="primary" onClick={() => setShowReq(true)}>
+                🙋 Request a visit time
+              </button>
+            </>
+          ) : (
+            <form onSubmit={submitRequest}>
+              <p className="note">
+                Suggest a day and time — Mum &amp; Dad get a nudge and can approve it with one tap.
+              </p>
+              <div className="row rowwrap">
+                <div>
+                  <label htmlFor="vr-d">Day</label>
+                  <input id="vr-d" type="date" value={reqDate} min={todayKey()} onChange={(e) => setReqDate(e.target.value)} required />
+                </div>
+                <div>
+                  <label htmlFor="vr-f">From</label>
+                  <input id="vr-f" type="time" value={reqFrom} onChange={(e) => setReqFrom(e.target.value)} required />
+                </div>
+                <div>
+                  <label htmlFor="vr-t">To</label>
+                  <input id="vr-t" type="time" value={reqTo} onChange={(e) => setReqTo(e.target.value)} required />
+                </div>
+              </div>
+              <label htmlFor="vr-n" style={{ marginTop: 8 }}>Note (optional)</label>
+              <input id="vr-n" type="text" value={reqNote} onChange={(e) => setReqNote(e.target.value)} placeholder="e.g. after work, bringing Nana" />
+              <div className="row" style={{ marginTop: 10 }}>
+                <button className="primary" type="submit">Send request</button>
+                <button type="button" className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setShowReq(false)}>
+                  Not now
+                </button>
+              </div>
+            </form>
+          )}
+          {reqMsg && <p className="muted" style={{ marginTop: 8 }}>{reqMsg}</p>}
+          {requests.filter((r) => r.requested_by === profile.id).length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              {requests
+                .filter((r) => r.requested_by === profile.id)
+                .map((r) => (
+                  <div key={r.id} className="slot">
+                    <div style={{ flex: 1 }}>
+                      <span className="t">
+                        {fmtDate(r.req_date)} · {fmtTime(r.start_time)} – {fmtTime(r.end_time)}
+                      </span>{" "}
+                      <span className={`badge ${r.status === "approved" ? "booked" : ""}`}>
+                        {r.status === "pending" ? "waiting" : r.status === "approved" ? "approved 🎉" : "couldn't this time"}
+                      </span>
+                    </div>
+                    {r.status === "pending" && (
+                      <button className="tiny" onClick={() => cancelRequest(r)}>
+                        cancel
+                      </button>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="card">
         <h2>Visiting slots</h2>
         {!isParent && (
@@ -619,68 +682,6 @@ export default function VisitsTab() {
         )}
       </div>
 
-      {!isParent && profile.role === "family" && (
-        <div className="card">
-          <h2>Can&apos;t see a time that works?</h2>
-          {!showReq ? (
-            <button className="ghost" onClick={() => setShowReq(true)}>
-              🙋 Request a visit time
-            </button>
-          ) : (
-            <form onSubmit={submitRequest}>
-              <p className="note">
-                Suggest a day and time — Mum &amp; Dad get a nudge and can approve it with one tap.
-              </p>
-              <div className="row rowwrap">
-                <div>
-                  <label htmlFor="vr-d">Day</label>
-                  <input id="vr-d" type="date" value={reqDate} min={todayKey()} onChange={(e) => setReqDate(e.target.value)} required />
-                </div>
-                <div>
-                  <label htmlFor="vr-f">From</label>
-                  <input id="vr-f" type="time" value={reqFrom} onChange={(e) => setReqFrom(e.target.value)} required />
-                </div>
-                <div>
-                  <label htmlFor="vr-t">To</label>
-                  <input id="vr-t" type="time" value={reqTo} onChange={(e) => setReqTo(e.target.value)} required />
-                </div>
-              </div>
-              <label htmlFor="vr-n" style={{ marginTop: 8 }}>Note (optional)</label>
-              <input id="vr-n" type="text" value={reqNote} onChange={(e) => setReqNote(e.target.value)} placeholder="e.g. after work, bringing Nana" />
-              <div className="row" style={{ marginTop: 10 }}>
-                <button className="primary" type="submit">Send request</button>
-                <button type="button" className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setShowReq(false)}>
-                  Not now
-                </button>
-              </div>
-            </form>
-          )}
-          {reqMsg && <p className="muted" style={{ marginTop: 8 }}>{reqMsg}</p>}
-          {requests.filter((r) => r.requested_by === profile.id).length > 0 && (
-            <div style={{ marginTop: 10 }}>
-              {requests
-                .filter((r) => r.requested_by === profile.id)
-                .map((r) => (
-                  <div key={r.id} className="slot">
-                    <div style={{ flex: 1 }}>
-                      <span className="t">
-                        {fmtDate(r.req_date)} · {fmtTime(r.start_time)} – {fmtTime(r.end_time)}
-                      </span>{" "}
-                      <span className={`badge ${r.status === "approved" ? "booked" : ""}`}>
-                        {r.status === "pending" ? "waiting" : r.status === "approved" ? "approved 🎉" : "couldn't this time"}
-                      </span>
-                    </div>
-                    {r.status === "pending" && (
-                      <button className="tiny" onClick={() => cancelRequest(r)}>
-                        cancel
-                      </button>
-                    )}
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
-      )}
     </section>
   );
 }

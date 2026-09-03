@@ -110,7 +110,9 @@ export default function FeedsTab() {
     if (st.data) setSettings({ ...DEFAULT_SETTINGS, ...st.data });
     setWindows((sw.data as SleepWindowRow[]) ?? []);
     const allFeeds = (fd.data as FeedRecord[]) ?? [];
-    setFeeds(allFeeds.filter((f) => f.started_at >= dayStartIso));
+    // today's sessions — plus any still-running one from before midnight, so a
+    // pump straddling midnight keeps its timer and can still be finished
+    setFeeds(allFeeds.filter((f) => f.started_at >= dayStartIso || !f.ended_at));
     // daily expressed totals for the last 7 full days (coach input)
     const totals: Record<string, number> = {};
     const dayOf = (iso: string) => {
@@ -211,13 +213,6 @@ export default function FeedsTab() {
     );
   }
 
-  function todayAt(hhmm: string): string {
-    const [h, m] = hhmm.split(":").map(Number);
-    const d = new Date();
-    d.setHours(h, m, 0, 0);
-    return d.toISOString();
-  }
-
   // a specific calendar day + time (local) → ISO — for back-logging past days
   function atOn(dateStr: string, hhmm: string): string {
     return new Date(`${dateStr}T${hhmm}`).toISOString();
@@ -298,10 +293,17 @@ export default function FeedsTab() {
   async function saveEdit() {
     if (!editId) return;
     setErr("");
+    const rec = feeds.find((f) => f.id === editId);
+    if (!rec) return;
     const ml = editMl ? parseFloat(editMl) : null;
+    // the edited time stays on the session's ORIGINAL calendar day — around
+    // midnight "today's date" and the record's date can differ
+    const at = new Date(rec.started_at);
+    const [h, m] = editTime.split(":").map(Number);
+    at.setHours(h, m, 0, 0);
     const { error } = await supabase
       .from("feeds")
-      .update({ started_at: todayAt(editTime), ml, method: editMethod })
+      .update({ started_at: at.toISOString(), ml, method: editMethod })
       .eq("id", editId);
     if (error) setErr(error.message);
     setEditId(null);
@@ -428,13 +430,20 @@ export default function FeedsTab() {
             <div className="row rowwrap">
               <button className="primary" onClick={startFeed} style={{ flex: "0 0 auto" }}>Start pumping now</button>
               <PowerPumpButton />
-              <button className="ghost" style={{ flex: "0 0 auto" }} onClick={() => setShowPast((s) => !s)}>
+              <button
+                className="ghost"
+                style={{ flex: "0 0 auto" }}
+                onClick={() => {
+                  // re-default the day every time the form opens — the tab can
+                  // sit mounted across midnight, and a stale default quietly
+                  // files an overnight pump under the previous day
+                  if (!showPast) setPastDate(todayKey());
+                  setShowPast(!showPast);
+                }}
+              >
                 Log a past one
               </button>
             </div>
-            <p className="muted" style={{ marginTop: 6 }}>
-              Power pump runs an hour of pump/rest intervals to nudge supply up.
-            </p>
             {showPast && (
               <form onSubmit={logPastFeed} style={{ marginTop: 10 }}>
                 <div className="row rowwrap">
@@ -526,9 +535,6 @@ export default function FeedsTab() {
                     <span className="t">
                       {s.logged ? "✓" : "·"} {fmtHM(s.at)}
                       {s.power && <span aria-hidden="true"> 💪</span>}
-                      {s.at.getDate() !== new Date().getDate() && (
-                        <span className="muted" style={{ fontWeight: 600 }}> +1</span>
-                      )}
                     </span>
                     <span className="info" style={{ flex: 1 }}>
                       {s.logged
@@ -541,7 +547,6 @@ export default function FeedsTab() {
                               : null,
                           ].filter(Boolean).join(" · ")
                         : [
-                            s.power ? "power pump — fixed, use the 💪 button" : null,
                             s.assigned === "pre-sleep"
                               ? "last one before Mum's sleep 😴"
                               : s.assigned === "post-sleep"

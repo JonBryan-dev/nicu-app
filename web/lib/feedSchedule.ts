@@ -53,7 +53,7 @@ export interface ScheduleEntry {
     | "post-meal"
     | null;
   duringVisit: string | null; // booker name or 'free slot'
-  power?: boolean; // the fixed 23:00 power-pump session
+  power?: boolean; // the power-pump session — first one after Mum wakes
 }
 
 const toMin = (t: string) => {
@@ -153,8 +153,6 @@ function windowBoundsAround(
 }
 
 const MIN_PUMP_GAP_MS = 45 * 60000;
-// the nightly power pump is pinned to this hour — it never re-anchors
-export const POWER_PUMP_HOUR = 23;
 
 /** Next pump after `from`: interval-stepped, but a session that would land in
  *  Mum's sleep brackets it — moved to just before the window (if there's a
@@ -245,11 +243,16 @@ export function computeSchedule(
     anchor.setHours(h, m, 0, 0);
   }
 
-  // project forward until tomorrow's day_from
+  // pumping stays on the plain 24-hour clock — today's plan ends at midnight;
+  // the legacy feeds branch still projects to tomorrow's day_from
   const endOfDay = new Date(now);
   endOfDay.setDate(endOfDay.getDate() + 1);
-  const [eh, em] = settings.day_from.split(":").map(Number);
-  endOfDay.setHours(eh, em, 0, 0);
+  if (pumping) {
+    endOfDay.setHours(0, 0, 0, 0);
+  } else {
+    const [eh, em] = settings.day_from.split(":").map(Number);
+    endOfDay.setHours(eh, em, 0, 0);
+  }
 
   // planned first session when nothing's logged yet and the day hasn't started
   if (!sorted.length && anchor > now) {
@@ -299,48 +302,17 @@ export function computeSchedule(
       planned = project(dayGap);
     }
 
-    // The 23:00 power pump is FIXED — it never moves with re-anchoring.
-    // If tonight's is already logged, just badge it; otherwise clear planned
-    // sessions out of the hour before it, pin the 23:00 entry, and re-plan the
-    // overnight from its end (it runs a full hour, so from midnight).
-    const powerAt = new Date(now);
-    powerAt.setHours(POWER_PUMP_HOUR, 0, 0, 0);
-    const powerLogged = sorted.find(
-      (f) =>
-        (f.note ?? "").includes("Power pump") &&
-        new Date(f.started_at).getHours() >= POWER_PUMP_HOUR - 2
-    );
-    if (powerLogged) {
+    // a logged "Power pump" session keeps its 💪 badge at whatever time it
+    // actually happened; nothing planned is pinned — Mum starts one with the
+    // 💪 button whenever it suits
+    for (const f of sorted) {
+      if (!(f.note ?? "").includes("Power pump")) continue;
       const done = entries.find(
-        (x) => x.logged && +x.at === +new Date(powerLogged.started_at)
+        (x) => x.logged && +x.at === +new Date(f.started_at)
       );
       if (done) done.power = true;
-      entries.push(...planned);
-      return entries;
     }
-    entries.push(...planned.filter((p) => +p.at < +powerAt - 60 * 60000));
-    if (powerAt < endOfDay) {
-      entries.push({
-        at: powerAt,
-        logged: false,
-        assigned: null,
-        duringVisit: visitFor(powerAt, slots),
-        power: true,
-      });
-      let t = new Date(+powerAt + 60 * 60000); // hour-long session ends here
-      let guard = 0;
-      while (guard++ < 10) {
-        const { at, tag } = nextPump(t, settings, windows);
-        if (+at <= +t || at >= endOfDay) break;
-        entries.push({
-          at: new Date(at),
-          logged: false,
-          assigned: tag,
-          duringVisit: visitFor(at, slots),
-        });
-        t = at;
-      }
-    }
+    entries.push(...planned);
     return entries;
   }
 

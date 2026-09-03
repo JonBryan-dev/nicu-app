@@ -25,6 +25,7 @@ type NotificationRow = {
   id: string;
   family_id: string;
   recipient_role: "parent" | "family" | "all";
+  recipient_id?: string | null; // set = this one person, not the whole role
   actor_id: string | null;
   title: string;
   body: string;
@@ -37,18 +38,24 @@ Deno.serve(async (req) => {
     const row: NotificationRow = payload.record; // DB webhook shape
     if (!row?.family_id) return new Response("no record", { status: 400 });
 
-    // recipients: profiles in family with matching role, excluding the actor
-    let q = supabase
-      .from("profiles")
-      .select("id, role")
-      .eq("family_id", row.family_id);
-    if (row.recipient_role !== "all") q = q.eq("role", row.recipient_role);
-    const { data: profiles, error: pErr } = await q;
-    if (pErr) throw pErr;
-
-    const recipientIds = (profiles ?? [])
-      .filter((p) => p.id !== row.actor_id)
-      .map((p) => p.id);
+    // recipients: one named person when recipient_id is set (an approved visit
+    // request, say), otherwise everyone in the family with a matching role.
+    // Either way the actor never gets pushed their own action.
+    let recipientIds: string[];
+    if (row.recipient_id) {
+      recipientIds = row.recipient_id === row.actor_id ? [] : [row.recipient_id];
+    } else {
+      let q = supabase
+        .from("profiles")
+        .select("id, role")
+        .eq("family_id", row.family_id);
+      if (row.recipient_role !== "all") q = q.eq("role", row.recipient_role);
+      const { data: profiles, error: pErr } = await q;
+      if (pErr) throw pErr;
+      recipientIds = (profiles ?? [])
+        .filter((p) => p.id !== row.actor_id)
+        .map((p) => p.id);
+    }
     if (!recipientIds.length) return new Response("no recipients");
 
     const { data: subs, error: sErr } = await supabase
