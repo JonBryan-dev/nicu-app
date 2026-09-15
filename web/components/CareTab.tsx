@@ -24,6 +24,14 @@ import {
   feedOnTime,
   feedStreak,
   FEED_ON_TIME_MIN,
+  CARE_ON_TIME_MIN,
+  scoreRound,
+  careStreak,
+  levelFor,
+  computeBadges,
+  feedTickPoints,
+  dayKey,
+  POINTS,
   DEFAULT_CARE_SETTINGS,
   type FeedTick,
   type CareRound,
@@ -47,6 +55,9 @@ export default function CareTab() {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [feedPlan, setFeedPlan] = useState<{ first: string; every: number; ml: number | null } | null>(null);
   const [feedTicks, setFeedTicks] = useState<FeedTick[]>([]);
+  const [hist, setHist] = useState<CareRound[]>([]); // every finished round, oldest first
+  const [stepCounts, setStepCounts] = useState<Record<string, number>>({});
+  const [toast, setToast] = useState<string | null>(null);
   const [tempInput, setTempInput] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -60,7 +71,7 @@ export default function CareTab() {
   const load = useCallback(async () => {
     if (!isParent) return;
     const since = new Date(Date.now() - 48 * 3600e3).toISOString();
-    const [st, rd, done, bed, fs, ft] = await Promise.all([
+    const [st, rd, done, bed, fs, ft, hs] = await Promise.all([
       supabase.from("care_settings").select("*").eq("family_id", family.id).maybeSingle(),
       supabase
         .from("care_rounds")
@@ -90,8 +101,13 @@ export default function CareTab() {
         .from("feed_ticks")
         .select("*, doer:profiles!feed_ticks_done_by_fkey(display_name)")
         .eq("family_id", family.id)
-        .gte("due_at", new Date(Date.now() - 8 * 86400e3).toISOString())
         .order("due_at", { ascending: false }),
+      supabase
+        .from("care_rounds")
+        .select("id, family_id, started_by, started_at, completed_at, completed_by, position, foot, temperature, bedding_changed, note, photo_paths, steps_done, finisher:profiles!care_rounds_completed_by_fkey(display_name)")
+        .eq("family_id", family.id)
+        .not("completed_at", "is", null)
+        .order("completed_at", { ascending: true }),
     ]);
     if (rd.error && /care_rounds/.test(rd.error.message)) {
       setErr("Cares need the latest database migration (034) — run it and this page comes alive.");
@@ -110,6 +126,17 @@ export default function CareTab() {
         : null
     );
     setFeedTicks((ft.data as unknown as FeedTick[]) ?? []);
+    const all = (hs.data as unknown as CareRound[]) ?? [];
+    setHist(all);
+    // rounds finished before steps_done existed: count their ticks (last 7 days only)
+    const weekAgo = Date.now() - 7 * 86400e3;
+    const needIds = all.filter((r) => r.steps_done == null && +new Date(r.completed_at!) > weekAgo).map((r) => r.id);
+    if (needIds.length) {
+      const { data: tk } = await supabase.from("care_ticks").select("round_id").in("round_id", needIds);
+      const counts: Record<string, number> = {};
+      for (const row of (tk as { round_id: string }[]) ?? []) counts[row.round_id] = (counts[row.round_id] ?? 0) + 1;
+      setStepCounts(counts);
+    }
     const open = rs.find((r) => !r.completed_at);
     if (open) {
       const { data: tk } = await supabase.from("care_ticks").select("*").eq("round_id", open.id);
@@ -193,6 +220,59 @@ export default function CareTab() {
   const roundsPerDay = Math.max(1, Math.round(1440 / settings.round_interval_min));
   const roundsToday = completed.filter((r) => new Date(r.completed_at!).toDateString() === todayKey).length;
 
+  // ---- scoring ----
+  const stepsFor = (r: CareRound) => r.steps_done ?? stepCounts[r.id] ?? 0;
+  const scoreOf = new Map<string, ReturnType<typeof scoreRound>>();
+  hist.forEach((r, i) => scoreOf.set(r.id, scoreRound(r, i > 0 ? hist[i - 1] : null, settings.round_interval_min, stepsFor(r))));
+  const roundStreak = careStreak(hist, settings.round_interval_min);
+  const todayK = dayKey(now);
+  const feedPointsOn = (k: string) =>
+    feedTicks.filter((x) => dayKey(new Date(x.due_at)) === k).reduce((a, x) => a + feedTickPoints(x), 0);
+  const roundPointsOn = (k: string) =>
+    hist.filter((r) => dayKey(new Date(r.completed_at!)) === k).reduce((a, r) => a + (scoreOf.get(r.id)?.points ?? 0), 0);
+  const pointsToday = feedPointsOn(todayK) + roundPointsOn(todayK);
+  const lifetimePoints =
+    feedTicks.reduce((a, x) => a + feedTickPoints(x), 0) + hist.reduce((a, r) => a + (scoreOf.get(r.id)?.points ?? 0), 0);
+  const level = levelFor(lifetimePoints, first);
+  const badges = computeBadges({ rounds: hist, stepsFor, ticks: feedTicks, feedPlan, feedStreak: streak, now });
+  const earnedCount = badges.filter((b) => b.earned).length;
+  // today's team — who did what
+  const tally: Record<string, { feeds: number; rounds: number }> = {};
+  for (const x of feedTicks)
+    if (dayKey(new Date(x.due_at)) === todayK) {
+      const n = x.doer?.display_name ?? "Someone";
+      (tally[n] ??= { feeds: 0, rounds: 0 }).feeds++;
+    }
+  for (const r of hist)
+    if (dayKey(new Date(r.completed_at!)) === todayK) {
+      const n = r.finisher?.display_name ?? "Someone";
+      (tally[n] ??= { feeds: 0, rounds: 0 }).rounds++;
+    }
+  // the week, day by day (feed dots only from the first tick onwards)
+  const firstTickMs = feedTicks.length ? Math.min(...feedTicks.map((x) => +new Date(x.due_at))) : Infinity;
+  const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - (6 - i));
+    d.setHours(12, 0, 0, 0);
+    const k = dayKey(d);
+    const slots = feedPlan ? feedSlots(feedPlan.first, feedPlan.every, d) : [];
+    return {
+      key: k,
+      label: `${DOW[d.getDay()]} ${d.getDate()}`,
+      slots,
+      tracked: slots.length > 0 && +slots[slots.length - 1] >= firstTickMs,
+      rounds: hist.filter((r) => dayKey(new Date(r.completed_at!)) === k).length,
+      points: feedPointsOn(k) + roundPointsOn(k),
+      isToday: k === todayK,
+    };
+  });
+  const bestDay = Math.max(0, ...week.filter((w) => !w.isToday).map((w) => w.points));
+  const say = (msg: string) => {
+    setToast(msg);
+    window.setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 7000);
+  };
+
   // ---- actions ----
   async function startRound() {
     setErr("");
@@ -255,11 +335,25 @@ export default function CareTab() {
   async function finishRound() {
     if (!open) return;
     setBusy(true);
+    const steps = CARE_STEPS.filter(stepDone).length;
+    const finishedAt = new Date().toISOString();
     await patchRound({
-      completed_at: new Date().toISOString(),
+      completed_at: finishedAt,
       completed_by: profile.id,
       note: note.trim() || null,
+      steps_done: steps,
     });
+    const sc = scoreRound(
+      { ...open, completed_at: finishedAt, completed_by: profile.id },
+      lastDone,
+      settings.round_interval_min,
+      steps
+    );
+    say(
+      `Round done · +${sc.points} pts` +
+        (sc.full ? " · full house 🏠" : ` · ${steps}/${CARE_STEPS.length} steps`) +
+        (sc.onTime ? " · on time ✓" : "")
+    );
     setNote("");
     setTempInput("");
     setBusy(false);
@@ -279,6 +373,10 @@ export default function CareTab() {
       { onConflict: "family_id,due_at" }
     );
     if (error) setErr(/feed_ticks/.test(error.message) ? "Feed ticks need database migration 035." : error.message);
+    else {
+      const late = +new Date() - +slot > FEED_ON_TIME_MIN * 60000;
+      say(late ? `${fmtHM(slot)} feed ticked · +${POINTS.feedLate} pts` : `${fmtHM(slot)} feed on time · +${POINTS.feedOnTime} pts ✓`);
+    }
     load();
   }
   async function untickFeed(t: FeedTick) {
@@ -313,6 +411,11 @@ export default function CareTab() {
       {/* hero: what's next */}
       <div className="card">
         <h2>{first}&apos;s cares</h2>
+        {toast && (
+          <p className="toast" role="status">
+            {toast}
+          </p>
+        )}
         {open ? (
           <>
             <p className="note">
@@ -345,52 +448,6 @@ export default function CareTab() {
         )}
         {err && <p className="err">{err}</p>}
       </div>
-
-      {/* feeds: the ward's grid, one tick each */}
-      {feedPlan && feedNow && feedTarget && feedDue && (
-        <div className="card">
-          <h2>{currentTick ? "Next feed" : "Feed"}</h2>
-          <div className="caredue">
-            <div className={`big ${feedDue.state}`}>{fmtHM(feedTarget)}</div>
-            <div className="muted">
-              {currentTick
-                ? `${fmtHM(new Date(currentTick.due_at))} ticked${currentTick.doer ? ` by ${currentTick.doer.display_name}` : ""} · next ${feedDue.text}`
-                : feedDue.text}
-              {" · every "}
-              {Math.round((feedPlan.every / 60) * 10) / 10}h{feedPlan.ml ? ` · ${feedPlan.ml} ml` : ""}
-            </div>
-          </div>
-          <button
-            className={currentTick ? "ghost" : "primary"}
-            onClick={() => tickFeed(feedTarget)}
-            style={currentTick ? { width: "100%" } : undefined}
-          >
-            ✓ {currentTick ? `Mark ${fmtHM(feedTarget)} fed` : `Fed — ${fmtHM(feedTarget)}`}
-          </button>
-          <div className="dots" aria-label="Today's feeds">
-            {slotsToday.map((s) => {
-              const st = dotState(s);
-              const tk = tickByDue.get(+s);
-              const future = st === "todo" && s > now;
-              return (
-                <button
-                  key={+s}
-                  type="button"
-                  className={`dot ${st}`}
-                  disabled={future}
-                  title={`${fmtHM(s)} — ${st === "done" ? "on time" : st === "late" ? "ticked late" : st === "missed" ? "not ticked" : st === "now" ? "due now" : "later"}`}
-                  aria-label={`${fmtHM(s)} feed, ${st}`}
-                  onClick={() => (tk ? untickFeed(tk) : tickFeed(s))}
-                />
-              );
-            })}
-          </div>
-          <div className="dotlabel">
-            <span><b>{fedToday}</b> of {slotsToday.length} today · <b>{onTimeToday}</b> on time</span>
-            <span>tap a dot to tick or untick</span>
-          </div>
-        </div>
-      )}
 
       {/* the round itself */}
       {open && (
@@ -554,12 +611,62 @@ export default function CareTab() {
         </div>
       )}
 
+      {/* feeds: the ward's grid, one tick each */}
+      {feedPlan && feedNow && feedTarget && feedDue && (
+        <div className="card">
+          <h2>{currentTick ? "Next feed" : "Feed"}</h2>
+          <div className="caredue">
+            <div className={`big ${feedDue.state}`}>{fmtHM(feedTarget)}</div>
+            <div className="muted">
+              {currentTick
+                ? `${fmtHM(new Date(currentTick.due_at))} ticked${currentTick.doer ? ` by ${currentTick.doer.display_name}` : ""} · next ${feedDue.text}`
+                : feedDue.text}
+              {" · every "}
+              {Math.round((feedPlan.every / 60) * 10) / 10}h{feedPlan.ml ? ` · ${feedPlan.ml} ml` : ""}
+            </div>
+          </div>
+          <button
+            className={currentTick ? "ghost" : "primary"}
+            onClick={() => tickFeed(feedTarget)}
+            style={currentTick ? { width: "100%" } : undefined}
+          >
+            ✓ {currentTick ? `Mark ${fmtHM(feedTarget)} fed` : `Fed — ${fmtHM(feedTarget)}`}
+          </button>
+          <div className="dots" aria-label="Today's feeds">
+            {slotsToday.map((s) => {
+              const st = dotState(s);
+              const tk = tickByDue.get(+s);
+              const future = st === "todo" && s > now;
+              return (
+                <button
+                  key={+s}
+                  type="button"
+                  className={`dot ${st}`}
+                  disabled={future}
+                  title={`${fmtHM(s)} — ${st === "done" ? "on time" : st === "late" ? "ticked late" : st === "missed" ? "not ticked" : st === "now" ? "due now" : "later"}`}
+                  aria-label={`${fmtHM(s)} feed, ${st}`}
+                  onClick={() => (tk ? untickFeed(tk) : tickFeed(s))}
+                />
+              );
+            })}
+          </div>
+          <div className="dotlabel">
+            <span><b>{fedToday}</b> of {slotsToday.length} today · <b>{onTimeToday}</b> on time</span>
+            <span>tap a dot to tick or untick</span>
+          </div>
+        </div>
+      )}
+
       {/* today, at a glance */}
       <div className="card">
         <h2>Today</h2>
+        <div className="scoreline">
+          <span className="score">{pointsToday}</span>
+          <span className="muted"> pts today{bestDay ? ` · best this week ${bestDay}` : ""}</span>
+        </div>
         {feedPlan && (
           <>
-            <div className="dotlabel" style={{ marginTop: 0 }}>
+            <div className="dotlabel" style={{ marginTop: 6 }}>
               <span>Feeds</span>
               <span><b>{fedToday}</b> / {slotsToday.length}</span>
             </div>
@@ -579,14 +686,78 @@ export default function CareTab() {
             <span key={i} className={`dot ${i < roundsToday ? "done" : "todo"}`} style={{ width: 14, height: 14, cursor: "default" }} />
           ))}
         </div>
-        {feedPlan && (
+        <div className="streaks">
+          {feedPlan && (
+            <div className="streak">
+              {streak > 0 ? `🔥 ${streak} feed${streak === 1 ? "" : "s"} on time in a row` : "🔥 Tick the next feed on time to start a streak"}
+            </div>
+          )}
           <div className="streak">
-            {streak > 0 ? `🔥 ${streak} feed${streak === 1 ? "" : "s"} on time in a row` : "Tick the next feed on time to start a streak"}
+            {roundStreak > 0 ? `⏱ ${roundStreak} round${roundStreak === 1 ? "" : "s"} on time in a row` : "⏱ Finish a round within the hour of due to start a streak"}
+          </div>
+        </div>
+        {Object.keys(tally).length > 0 && (
+          <div className="tally">
+            <span className="muted">Today&apos;s team</span>
+            {Object.entries(tally)
+              .sort((x, y) => y[1].feeds + y[1].rounds - (x[1].feeds + x[1].rounds))
+              .map(([name, n]) => (
+                <span key={name} className="tally-who">
+                  <b>{name}</b> {n.feeds} feed{n.feeds === 1 ? "" : "s"} · {n.rounds} round{n.rounds === 1 ? "" : "s"}
+                </span>
+              ))}
           </div>
         )}
-        <p className="muted" style={{ marginTop: 6 }}>
-          On time = ticked within {FEED_ON_TIME_MIN} minutes of the slot. Every tick is one you both can see.
+        <p className="muted" style={{ marginTop: 8 }}>
+          Feeds {POINTS.feedOnTime} on time / {POINTS.feedLate} late · rounds {POINTS.round}, +{POINTS.roundOnTime} within the hour, +{POINTS.fullRound} full house, +{POINTS.bedding} fresh bedding, +{POINTS.photo} a photo. On time = {FEED_ON_TIME_MIN} min for feeds, {CARE_ON_TIME_MIN} for rounds.
         </p>
+      </div>
+
+      {/* level & badges */}
+      <div className="card">
+        <h2>
+          Level {level.index} · {level.name}
+        </h2>
+        <div className="progress levelbar">
+          <i style={{ width: `${Math.round(level.progress * 100)}%` }} />
+        </div>
+        <div className="dotlabel" style={{ marginTop: 0 }}>
+          <span><b>{lifetimePoints.toLocaleString()}</b> pts all time</span>
+          <span>{level.next ? `${(level.next.at - lifetimePoints).toLocaleString()} to ${level.next.name.replace("{baby}", first)}` : "top level"}</span>
+        </div>
+        <div className="dotlabel">
+          <span>Badges</span>
+          <span><b>{earnedCount}</b> / {badges.length}</span>
+        </div>
+        <div className="badges">
+          {badges.map((b) => (
+            <span key={b.key} className={`badge-chip ${b.earned ? "earned" : "locked"}`} title={b.how}>
+              <span className="badge-emoji" aria-hidden="true">{b.emoji}</span>
+              <span className="badge-name">{b.name}</span>
+              <span className="badge-how">{b.how}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* this week */}
+      <div className="card">
+        <h2>This week</h2>
+        <div className="week">
+          {week.map((w) => (
+            <div key={w.key} className={`weekrow ${w.isToday ? "today" : ""}`}>
+              <span className="weekday">{w.isToday ? "Today" : w.label}</span>
+              <span className="weekdots">
+                {w.tracked
+                  ? w.slots.map((s) => <span key={+s} className={`dot mini ${dotState(s)}`} />)
+                  : <span className="muted" style={{ fontSize: "0.78rem" }}>{feedPlan ? "before feeds were tracked" : "no feed plan"}</span>}
+              </span>
+              <span className="weeknum">{w.rounds} rnd{w.rounds === 1 ? "" : "s"}</span>
+              <span className="weeknum pts">{w.points}</span>
+            </div>
+          ))}
+        </div>
+        <p className="muted" style={{ marginTop: 6 }}>Dots are feeds; the last column is points for the day.</p>
       </div>
 
       {/* the record */}
@@ -616,6 +787,13 @@ export default function CareTab() {
                     </>
                   )}
                   {r.bedding_changed ? " · 🛏 fresh" : ""}
+                  {scoreOf.has(r.id) && (
+                    <span className="muted">
+                      {" · "}
+                      {stepsFor(r)}/{CARE_STEPS.length} steps · <b>+{scoreOf.get(r.id)!.points}</b>
+                      {scoreOf.get(r.id)!.onTime ? " ✓" : ""}
+                    </span>
+                  )}
                   {r.note && <div className="muted">“{r.note}”</div>}
                 </span>
                 {(r.photo_paths?.length ?? 0) > 0 && (

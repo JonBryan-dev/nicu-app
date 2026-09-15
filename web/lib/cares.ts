@@ -87,6 +87,7 @@ export interface CareRound {
   bedding_changed: boolean;
   note: string | null;
   photo_paths: string[];
+  steps_done?: number | null;
   starter?: { display_name: string } | null;
   finisher?: { display_name: string } | null;
 }
@@ -173,4 +174,148 @@ export function feedStreak(first: string, intervalMin: number, ticks: FeedTick[]
     streak++;
   }
   return streak;
+}
+
+// ---- scoring: the whole section is built to be worth checking ----
+export const CARE_ON_TIME_MIN = 60; // a round within the hour of due counts as on time
+export const POINTS = {
+  feedOnTime: 10,
+  feedLate: 5,
+  round: 20,
+  roundOnTime: 10,
+  fullRound: 5,
+  bedding: 5,
+  photo: 2,
+  photoCap: 6,
+} as const;
+
+export const dayKey = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+export const feedTickPoints = (t: FeedTick) => (feedOnTime(t) ? POINTS.feedOnTime : POINTS.feedLate);
+
+/** Was this round finished within the hour of when it was due (one interval
+ *  after the previous finished round)? The first round ever is on time. */
+export function roundOnTime(r: CareRound, prev: CareRound | null, intervalMin: number): boolean {
+  if (!r.completed_at) return false;
+  if (!prev?.completed_at) return true;
+  const due = +new Date(prev.completed_at) + intervalMin * 60000;
+  return +new Date(r.completed_at) <= due + CARE_ON_TIME_MIN * 60000;
+}
+
+export interface RoundScore {
+  points: number;
+  onTime: boolean;
+  full: boolean;
+  steps: number;
+}
+export function scoreRound(r: CareRound, prev: CareRound | null, intervalMin: number, steps: number): RoundScore {
+  const onTime = roundOnTime(r, prev, intervalMin);
+  const full = steps >= CARE_STEPS.length;
+  const photos = Math.min(POINTS.photoCap, (r.photo_paths?.length ?? 0) * POINTS.photo);
+  const points =
+    POINTS.round +
+    (onTime ? POINTS.roundOnTime : 0) +
+    (full ? POINTS.fullRound : 0) +
+    (r.bedding_changed ? POINTS.bedding : 0) +
+    photos;
+  return { points, onTime, full, steps };
+}
+
+/** Consecutive on-time rounds, counting back from the latest. `asc` is every
+ *  completed round oldest → newest. */
+export function careStreak(asc: CareRound[], intervalMin: number): number {
+  let streak = 0;
+  for (let i = asc.length - 1; i >= 0; i--) {
+    if (!roundOnTime(asc[i], i > 0 ? asc[i - 1] : null, intervalMin)) break;
+    streak++;
+  }
+  return streak;
+}
+
+export const LEVELS: { at: number; name: string }[] = [
+  { at: 0, name: "Cotside rookie" },
+  { at: 250, name: "Steady hands" },
+  { at: 1000, name: "Night-shift regular" },
+  { at: 2500, name: "Cotside pro" },
+  { at: 5000, name: "{baby}'s A-team" },
+  { at: 10000, name: "NICU legend" },
+];
+export function levelFor(points: number, baby: string) {
+  let i = 0;
+  while (i + 1 < LEVELS.length && points >= LEVELS[i + 1].at) i++;
+  const cur = LEVELS[i];
+  const next = LEVELS[i + 1] ?? null;
+  const progress = next ? (points - cur.at) / (next.at - cur.at) : 1;
+  return { index: i + 1, name: cur.name.replace("{baby}", baby), next, progress: Math.max(0, Math.min(1, progress)) };
+}
+
+export interface Badge {
+  key: string;
+  emoji: string;
+  name: string;
+  how: string;
+  earned: boolean;
+}
+export interface BadgeInput {
+  rounds: CareRound[]; // all completed, any order
+  stepsFor: (r: CareRound) => number;
+  ticks: FeedTick[]; // all feed ticks
+  feedPlan: { first: string; every: number } | null;
+  feedStreak: number;
+  now: Date;
+}
+export function computeBadges(inp: BadgeInput): Badge[] {
+  const done = inp.rounds.filter((r) => r.completed_at);
+  const hour = (r: CareRound) => new Date(r.completed_at!).getHours();
+  const byDay = new Map<string, CareRound[]>();
+  for (const r of done) {
+    const k = dayKey(new Date(r.completed_at!));
+    (byDay.get(k) ?? byDay.set(k, []).get(k)!).push(r);
+  }
+  const days = [...byDay.keys()].sort();
+  const photos = done.reduce((a, r) => a + (r.photo_paths?.length ?? 0), 0);
+
+  // clean sheets: bedding changed on 3 consecutive calendar days
+  const bedDays = new Set(done.filter((r) => r.bedding_changed).map((r) => dayKey(new Date(r.completed_at!))));
+  let cleanRun = 0;
+  for (const d of [...bedDays].sort()) {
+    const prev = new Date(d + "T12:00:00");
+    prev.setDate(prev.getDate() - 1);
+    cleanRun = bedDays.has(dayKey(prev)) ? cleanRun + 1 : 1;
+    if (cleanRun >= 3) break;
+  }
+
+  // perfect day: every feed slot of a day ticked on time (days since the first tick)
+  let perfect = false;
+  if (inp.feedPlan && inp.ticks.length) {
+    const tickByDue = new Map(inp.ticks.map((t) => [+new Date(t.due_at), t]));
+    const firstTick = inp.ticks.reduce((a, t) => Math.min(a, +new Date(t.due_at)), Infinity);
+    const today = dayKey(inp.now);
+    for (let back = 1; back <= 14 && !perfect; back++) {
+      const d = new Date(inp.now);
+      d.setDate(d.getDate() - back);
+      if (dayKey(d) === today) continue;
+      const slots = feedSlots(inp.feedPlan.first, inp.feedPlan.every, d);
+      if (!slots.length || +slots[0] < firstTick) continue;
+      perfect = slots.every((s) => {
+        const t = tickByDue.get(+s);
+        return t && feedOnTime(t);
+      });
+    }
+  }
+
+  const list: Badge[] = [
+    { key: "early", emoji: "🌅", name: "Early bird", how: "Finish a round between 4 and 7am", earned: done.some((r) => hour(r) >= 4 && hour(r) < 7) },
+    { key: "owl", emoji: "🦉", name: "Night owl", how: "Finish a round between midnight and 4am", earned: done.some((r) => hour(r) < 4) },
+    { key: "full", emoji: "🏠", name: "Full house", how: "Tick every step in one round", earned: done.some((r) => inp.stepsFor(r) >= CARE_STEPS.length) },
+    { key: "perfect", emoji: "🎯", name: "Perfect day", how: "Every feed of a day ticked on time", earned: perfect },
+    { key: "sheets", emoji: "🛏", name: "Clean sheets", how: "Fresh bedding three days running", earned: cleanRun >= 3 },
+    { key: "four", emoji: "🔄", name: "All four", how: "All four positions in one day", earned: days.some((d) => new Set(byDay.get(d)!.map((r) => r.position).filter(Boolean)).size >= 4) },
+    { key: "team", emoji: "🤝", name: "Tag team", how: "You both finish a round on the same day", earned: days.some((d) => new Set(byDay.get(d)!.map((r) => r.completed_by).filter(Boolean)).size >= 2) },
+    { key: "roll", emoji: "🔥", name: "On a roll", how: "A full day of feeds on time in a row", earned: inp.feedPlan ? inp.feedStreak >= Math.round(1440 / inp.feedPlan.every) : false },
+    { key: "snap", emoji: "📷", name: "Snapper", how: "Ten photos on rounds", earned: photos >= 10 },
+    { key: "century", emoji: "💯", name: "Century", how: "One hundred rounds finished", earned: done.length >= 100 },
+  ];
+  return list;
 }
