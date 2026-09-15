@@ -31,6 +31,7 @@ export default function RestTab() {
 
   const [shifts, setShifts] = useState<Record<string, ShiftAssignee>>({});
   const [respite, setRespite] = useState<ChecklistItem[]>([]);
+  const [patternMsg, setPatternMsg] = useState("");
 
   const loadShifts = useCallback(async () => {
     const { data } = await supabase
@@ -94,10 +95,27 @@ export default function RestTab() {
       if (isParent) {
         await ensurePeriodItems(supabase, family.id, isParent, "respite", weekKey);
         loadItems();
+        // a week with no blocks yet starts from the family's usual pattern
+        // (shift_defaults, migration 034); harmless if that's not run yet
+        await supabase.rpc("ensure_shift_week", { p_week_key: weekKey });
       }
       loadShifts();
     })();
   }, [supabase, family.id, isParent, dayKey, weekKey, loadItems, loadShifts]);
+
+  // "this is our set schedule" — keep it, or put a fiddled week back to it
+  async function savePattern() {
+    setPatternMsg("");
+    const { error } = await supabase.rpc("save_shift_defaults", { p_week_key: weekKey });
+    setPatternMsg(error ? "Couldn't save the pattern: " + error.message : "Saved — new weeks start from this pattern.");
+  }
+  async function resetPattern() {
+    setPatternMsg("");
+    if (!window.confirm("Put this week back to your usual pattern?")) return;
+    const { error } = await supabase.rpc("reset_shift_week", { p_week_key: weekKey });
+    setPatternMsg(error ? "Couldn't reset: " + error.message : "Back to your usual week.");
+    loadShifts();
+  }
 
   useRealtime(supabase, "shift_blocks", family.id, loadShifts);
   useRealtime(supabase, "checklist_items", family.id, loadItems);
@@ -165,7 +183,7 @@ export default function RestTab() {
         <h2>This week&apos;s shift pattern</h2>
         <p className="note">
           {isParent
-            ? "Tap a block to change who's on. You don't both need to be bedside all day — the unit will call if anything changes."
+            ? "Each week starts from your usual pattern — tap a block to change who's on this week. You don't both need to be bedside all day; the unit will call if anything changes."
             : "Who's with her, block by block, this week."}
         </p>
         <table className="shift" aria-label="Weekly shift pattern">
@@ -222,6 +240,17 @@ export default function RestTab() {
             Rest / off
           </span>
         </div>
+        {isParent && (
+          <div className="row rowwrap" style={{ marginTop: 10 }}>
+            <button type="button" className="ghost" onClick={savePattern}>
+              Make this our usual week
+            </button>
+            <button type="button" className="tiny" style={{ flex: "0 0 auto" }} onClick={resetPattern}>
+              back to usual
+            </button>
+          </div>
+        )}
+        {patternMsg && <p className="muted" style={{ marginTop: 6 }}>{patternMsg}</p>}
       </div>
 
       {isParent && (

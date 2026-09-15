@@ -1547,3 +1547,107 @@ select {
     transition: none !important;
   }
 }
+
+/* cares — the 4-hourly round, built for one hand at the cotside */
+.caredue {
+  text-align: center;
+  margin: 6px 0 14px;
+}
+.caredue .big {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 2.8rem;
+  font-weight: 700;
+  line-height: 1.05;
+}
+.caredue .big.due,
+.caredue .big.late { color: var(--rose-deep); }
+.caredue .big.soon { color: var(--sky); }
+.carestep {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--mist);
+}
+.carestep:last-of-type { border-bottom: none; }
+.carecheck {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  border: 2px solid var(--mist);
+  background: none;
+  color: var(--on-accent, #fff);
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1px;
+}
+.carecheck:disabled { cursor: default; }
+.carestep.done .carecheck {
+  background: var(--sage);
+  border-color: var(--sage);
+}
+.carebody { flex: 1; min-width: 0; }
+.caretitle { font-weight: 700; }
+.carestep.done .caretitle { color: var(--ink-soft); }
+.carehow {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.careopts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+.careopt {
+  border: 1px solid var(--mist);
+  background: none;
+  border-radius: 999px;
+  padding: 7px 13px;
+  font: 600 0.82rem var(--font-nunito), sans-serif;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.careopt.hint { border-color: var(--sky); color: var(--sky); }
+.careopt.on {
+  background: var(--sage);
+  border-color: var(--sage);
+  color: var(--on-accent, #fff);
+}
+.tempflag { font-size: 0.85rem; font-weight: 700; }
+.tempflag.low, .tempflag.high { color: var(--rose-deep); }
+.tempflag.ok { color: var(--sage); }
+.careround {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-bottom: 1px dotted var(--mist);
+  font-size: 0.92rem;
+}
+.careround:last-child { border-bottom: none; }
+.careround .t {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  min-width: 50px;
+  font-weight: 700;
+}
+.carethumbs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  flex-basis: 100%;
+}
+.carethumbs img {
+  width: 58px;
+  height: 58px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+}
