@@ -1688,3 +1688,75 @@ select {
   font-weight: 700;
   margin-top: 10px;
 }
+/* cares — scoring, levels, badges, the week */
+.toast {
+  background: color-mix(in srgb, var(--sage) 18%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--sage) 50%, transparent);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-weight: 700;
+  margin: 6px 0 10px;
+  text-align: center;
+}
+.scoreline { margin: 2px 0 6px; }
+.score {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.streaks { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.streaks .streak { font-size: 1.02rem; margin-top: 0; }
+.tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: baseline;
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+.tally-who b { color: var(--rose-deep); }
+.levelbar { margin: 8px 0 8px; }
+.levelbar i { background: var(--rose-deep); }
+.badges {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+.badge-chip {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: center;
+  border: 1px solid var(--mist);
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+.badge-chip.earned {
+  background: color-mix(in srgb, var(--sage) 14%, var(--card));
+  border-color: color-mix(in srgb, var(--sage) 45%, transparent);
+}
+.badge-chip.locked { opacity: 0.55; }
+.badge-chip.locked .badge-emoji { filter: grayscale(1); }
+.badge-emoji { grid-row: 1 / span 2; font-size: 1.4rem; text-align: center; }
+.badge-name { font-weight: 700; font-size: 0.88rem; }
+.badge-how { font-size: 0.74rem; color: var(--ink-soft); }
+.week { display: flex; flex-direction: column; }
+.weekrow {
+  display: grid;
+  grid-template-columns: 52px 1fr 48px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dotted var(--mist);
+  font-size: 0.85rem;
+}
+.weekrow:last-child { border-bottom: none; }
+.weekrow.today .weekday { color: var(--rose-deep); font-weight: 700; }
+.weekday { color: var(--ink-soft); }
+.weekdots { display: flex; flex-wrap: wrap; gap: 4px; }
+.dot.mini { width: 11px; height: 11px; border-width: 1.5px; cursor: default; }
+.weeknum { text-align: right; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.weeknum.pts { font-weight: 700; color: var(--ink); }
