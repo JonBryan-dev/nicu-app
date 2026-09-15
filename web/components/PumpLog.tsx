@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useRealtime } from "@/lib/useRealtime";
 
-const DAYS_BACK = 21;
+const SHOW_FIRST = 21; // days shown before "show all"
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const WDAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
@@ -42,19 +42,18 @@ export default function PumpLog({ supabase, familyId }: { supabase: SupabaseClie
   const [feeds, setFeeds] = useState<FeedRow[]>([]);
   const [expr, setExpr] = useState<ExRow[]>([]);
 
+  const [showAll, setShowAll] = useState(false);
+
+  // the whole record — every session since the start
   const load = useCallback(async () => {
-    const since = new Date();
-    since.setHours(0, 0, 0, 0);
-    since.setDate(since.getDate() - (DAYS_BACK - 1));
-    const iso = since.toISOString();
     const [fd, ex] = await Promise.all([
       supabase
         .from("feeds")
         .select("id, started_at, ended_at, ml, ml_left, ml_right")
         .eq("family_id", familyId)
         .eq("method", "pump")
-        .gte("started_at", iso),
-      supabase.from("expressing_logs").select("id, ml, at").eq("family_id", familyId).gte("at", iso),
+        .order("started_at", { ascending: false }),
+      supabase.from("expressing_logs").select("id, ml, at").eq("family_id", familyId).order("at", { ascending: false }),
     ]);
     setFeeds((fd.data as FeedRow[]) ?? []);
     setExpr((ex.data as ExRow[]) ?? []);
@@ -105,7 +104,7 @@ export default function PumpLog({ supabase, familyId }: { supabase: SupabaseClie
       <p className="muted" style={{ marginBottom: 6 }}>
         Every session, day by day — tap a day for the times and amounts. ✕ removes one logged by mistake.
       </p>
-      {days.map((d, i) => (
+      {(showAll ? days : days.slice(0, SHOW_FIRST)).map((d, i) => (
         <details key={d.key} className="logday" open={i === 0}>
           <summary>
             <span className="logday-date">{dayLabel(d.key)}</span>
@@ -136,6 +135,11 @@ export default function PumpLog({ supabase, familyId }: { supabase: SupabaseClie
           </ul>
         </details>
       ))}
+      {days.length > SHOW_FIRST && (
+        <button type="button" className="ghost" style={{ marginTop: 10 }} onClick={() => setShowAll((s) => !s)}>
+          {showAll ? `Show the last ${SHOW_FIRST} days` : `Show all ${days.length} days`}
+        </button>
+      )}
     </div>
   );
 }

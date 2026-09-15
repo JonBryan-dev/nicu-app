@@ -1,3 +1,5 @@
+import { isoWeekKey, dayName } from "@/lib/dates";
+
 // lib/cares.ts — Maisie's cares: the 4-hourly round. The step list lives here
 // (not in the database) so the how-to text can be precise and easy to change.
 // Position and foot-probe memory come from the last completed round.
@@ -162,7 +164,7 @@ export const feedOnTime = (t: FeedTick) =>
 
 /** Consecutive on-time feeds counting back from the last slot that's had a
  *  chance to be ticked. A missed slot, or a late tick, ends the run. */
-export function feedStreak(first: string, intervalMin: number, ticks: FeedTick[], now: Date = new Date()): number {
+export function feedStreak(first: string, intervalMin: number, ticks: FeedTick[], now: Date = new Date(), cov?: Coverage): number {
   const byDue = new Map(ticks.map((t) => [+new Date(t.due_at), t]));
   const { current } = feedSlotNow(first, intervalMin, now);
   // don't count the current slot against them until it's actually late
@@ -170,8 +172,12 @@ export function feedStreak(first: string, intervalMin: number, ticks: FeedTick[]
   let streak = 0;
   for (let i = 0; i < 7 * Math.ceil(1440 / intervalMin); i++, t -= intervalMin * 60000) {
     const tick = byDue.get(t);
-    if (!tick || !feedOnTime(tick)) break;
-    streak++;
+    if (tick) {
+      if (!feedOnTime(tick)) break;
+      streak++;
+    } else if (cov && !parentOnAt(cov, new Date(t))) {
+      continue; // nurses' feed — not theirs to miss
+    } else break;
   }
   return streak;
 }
@@ -196,11 +202,11 @@ export const feedTickPoints = (t: FeedTick) => (feedOnTime(t) ? POINTS.feedOnTim
 
 /** Was this round finished within the hour of when it was due (one interval
  *  after the previous finished round)? The first round ever is on time. */
-export function roundOnTime(r: CareRound, prev: CareRound | null, intervalMin: number): boolean {
+export function roundOnTime(r: CareRound, prev: CareRound | null, intervalMin: number, cov?: Coverage): boolean {
   if (!r.completed_at) return false;
-  if (!prev?.completed_at) return true;
-  const due = +new Date(prev.completed_at) + intervalMin * 60000;
-  return +new Date(r.completed_at) <= due + CARE_ON_TIME_MIN * 60000;
+  const due = roundDue(prev, intervalMin, cov);
+  if (!due) return true;
+  return +new Date(r.completed_at) <= +due + CARE_ON_TIME_MIN * 60000;
 }
 
 export interface RoundScore {
@@ -209,8 +215,8 @@ export interface RoundScore {
   full: boolean;
   steps: number;
 }
-export function scoreRound(r: CareRound, prev: CareRound | null, intervalMin: number, steps: number): RoundScore {
-  const onTime = roundOnTime(r, prev, intervalMin);
+export function scoreRound(r: CareRound, prev: CareRound | null, intervalMin: number, steps: number, cov?: Coverage): RoundScore {
+  const onTime = roundOnTime(r, prev, intervalMin, cov);
   const full = steps >= CARE_STEPS.length;
   const photos = Math.min(POINTS.photoCap, (r.photo_paths?.length ?? 0) * POINTS.photo);
   const points =
@@ -224,10 +230,10 @@ export function scoreRound(r: CareRound, prev: CareRound | null, intervalMin: nu
 
 /** Consecutive on-time rounds, counting back from the latest. `asc` is every
  *  completed round oldest → newest. */
-export function careStreak(asc: CareRound[], intervalMin: number): number {
+export function careStreak(asc: CareRound[], intervalMin: number, cov?: Coverage): number {
   let streak = 0;
   for (let i = asc.length - 1; i >= 0; i--) {
-    if (!roundOnTime(asc[i], i > 0 ? asc[i - 1] : null, intervalMin)) break;
+    if (!roundOnTime(asc[i], i > 0 ? asc[i - 1] : null, intervalMin, cov)) break;
     streak++;
   }
   return streak;
@@ -264,6 +270,7 @@ export interface BadgeInput {
   feedPlan: { first: string; every: number } | null;
   feedStreak: number;
   now: Date;
+  cov?: Coverage;
 }
 export function computeBadges(inp: BadgeInput): Badge[] {
   const done = inp.rounds.filter((r) => r.completed_at);
@@ -296,7 +303,7 @@ export function computeBadges(inp: BadgeInput): Badge[] {
       const d = new Date(inp.now);
       d.setDate(d.getDate() - back);
       if (dayKey(d) === today) continue;
-      const slots = feedSlots(inp.feedPlan.first, inp.feedPlan.every, d);
+      const slots = feedSlots(inp.feedPlan.first, inp.feedPlan.every, d).filter((s) => !inp.cov || parentOnAt(inp.cov, s));
       if (!slots.length || +slots[0] < firstTick) continue;
       perfect = slots.every((s) => {
         const t = tickByDue.get(+s);
@@ -318,4 +325,69 @@ export function computeBadges(inp: BadgeInput): Badge[] {
     { key: "century", emoji: "💯", name: "Century", how: "One hundred rounds finished", earned: done.length >= 100 },
   ];
   return list;
+}
+
+
+// ---- who's on: shifts have strict hours; outside them the nurses have her ----
+export type BlockName = "AM" | "PM" | "Eve";
+export type BlockHours = Record<BlockName, [string, string]>;
+export const DEFAULT_BLOCK_HOURS: BlockHours = {
+  AM: ["07:00", "13:00"],
+  PM: ["13:00", "18:00"],
+  Eve: ["18:00", "22:00"],
+};
+export interface Coverage {
+  blocks: Record<string, string>; // `${weekKey}-${Day}-${Block}` → assignee (this week's rota)
+  defaults: Record<string, string>; // `${Day}-${Block}` → assignee (the usual pattern)
+  hours: BlockHours;
+}
+export const NO_COVERAGE: Coverage = { blocks: {}, defaults: {}, hours: DEFAULT_BLOCK_HOURS };
+const minOf = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+};
+export function blockAt(cov: Coverage, at: Date): BlockName | null {
+  const m = at.getHours() * 60 + at.getMinutes();
+  for (const b of ["AM", "PM", "Eve"] as BlockName[]) {
+    const [s, e] = cov.hours[b];
+    if (m >= minOf(s) && m < minOf(e)) return b;
+  }
+  return null;
+}
+/** Is a parent on at this moment? Same rule as parent_on_at() in the database. */
+export function parentOnAt(cov: Coverage, at: Date): boolean {
+  const b = blockAt(cov, at);
+  if (!b) return false;
+  const k = dayKey(at);
+  const wk = isoWeekKey(k);
+  const dn = dayName(k);
+  const a = cov.blocks[`${wk}-${dn}-${b}`] ?? cov.defaults[`${dn}-${b}`] ?? "both";
+  return a === "mum" || a === "dad" || a === "both";
+}
+/** First moment at or after `from` when a parent is on (15-min steps, two days). */
+export function nextParentOn(cov: Coverage, from: Date): Date {
+  let t = new Date(from);
+  for (let i = 0; i < 192; i++) {
+    if (parentOnAt(cov, t)) return t;
+    t = new Date(+t + 15 * 60000);
+  }
+  return from;
+}
+/** Minutes of a calendar day with a parent on. */
+export function coveredMinutes(cov: Coverage, day: Date): number {
+  const t = new Date(day);
+  t.setHours(0, 0, 0, 0);
+  let mins = 0;
+  for (let i = 0; i < 96; i++) {
+    if (parentOnAt(cov, t)) mins += 15;
+    t.setMinutes(t.getMinutes() + 15);
+  }
+  return mins;
+}
+/** When a round is really due: one interval after the last, pushed to the
+ *  next parent shift if that lands in nurses' time. */
+export function roundDue(prev: CareRound | null, intervalMin: number, cov?: Coverage): Date | null {
+  if (!prev?.completed_at) return null;
+  const due = new Date(+new Date(prev.completed_at) + intervalMin * 60000);
+  return cov && !parentOnAt(cov, due) ? nextParentOn(cov, due) : due;
 }

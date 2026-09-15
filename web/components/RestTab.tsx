@@ -7,6 +7,7 @@ import { useRealtime } from "@/lib/useRealtime";
 import { todayKey, isoWeekKey } from "@/lib/dates";
 import { ensurePeriodItems } from "@/lib/ensureItems";
 import { ProgressBar, TickList } from "@/components/Checklist";
+import { DEFAULT_BLOCK_HOURS, type BlockHours, type BlockName } from "@/lib/cares";
 import {
   DAYS,
   BLOCKS,
@@ -32,6 +33,8 @@ export default function RestTab() {
   const [shifts, setShifts] = useState<Record<string, ShiftAssignee>>({});
   const [respite, setRespite] = useState<ChecklistItem[]>([]);
   const [patternMsg, setPatternMsg] = useState("");
+  const [hours, setHours] = useState<BlockHours>(DEFAULT_BLOCK_HOURS);
+  const [showHours, setShowHours] = useState(false);
 
   const loadShifts = useCallback(async () => {
     const { data } = await supabase
@@ -76,6 +79,42 @@ export default function RestTab() {
       }
     }
   }, [supabase, family.id, isParent, profile.id, weekKey]);
+
+  // strict block hours (care_settings, migration 037) — outside them the nurses have her
+  const loadHours = useCallback(async () => {
+    const { data } = await supabase
+      .from("care_settings")
+      .select("am_from, am_to, pm_from, pm_to, eve_from, eve_to")
+      .eq("family_id", family.id)
+      .maybeSingle();
+    const r = data as Record<string, string | null> | null;
+    if (!r) return;
+    const h = (k: string, d: string) => (r[k] ? String(r[k]).slice(0, 5) : d);
+    setHours({
+      AM: [h("am_from", DEFAULT_BLOCK_HOURS.AM[0]), h("am_to", DEFAULT_BLOCK_HOURS.AM[1])],
+      PM: [h("pm_from", DEFAULT_BLOCK_HOURS.PM[0]), h("pm_to", DEFAULT_BLOCK_HOURS.PM[1])],
+      Eve: [h("eve_from", DEFAULT_BLOCK_HOURS.Eve[0]), h("eve_to", DEFAULT_BLOCK_HOURS.Eve[1])],
+    });
+  }, [supabase, family.id]);
+  useEffect(() => {
+    loadHours();
+  }, [loadHours]);
+  useRealtime(supabase, "care_settings", family.id, loadHours);
+
+  async function saveHours(block: BlockName, which: 0 | 1, value: string) {
+    if (!value) return;
+    const next: BlockHours = { ...hours, [block]: [...hours[block]] as [string, string] };
+    next[block][which] = value;
+    setHours(next);
+    const { error } = await supabase.from("care_settings").upsert({
+      family_id: family.id,
+      am_from: next.AM[0], am_to: next.AM[1],
+      pm_from: next.PM[0], pm_to: next.PM[1],
+      eve_from: next.Eve[0], eve_to: next.Eve[1],
+      updated_at: new Date().toISOString(),
+    });
+    if (error) setPatternMsg("Hours didn't save: " + error.message);
+  }
 
   const loadItems = useCallback(async () => {
     if (!isParent) return; // respite is mum & dad's private space
@@ -198,7 +237,10 @@ export default function RestTab() {
           <tbody>
             {BLOCKS.map((b) => (
               <tr key={b}>
-                <th style={{ textAlign: "left" }}>{b}</th>
+                <th style={{ textAlign: "left" }}>
+                  {b}
+                  <small>{hours[b][0].slice(0, 5)}–{hours[b][1].slice(0, 5)}</small>
+                </th>
                 {DAYS.map((d) => {
                   const st = shifts[`${d}-${b}`] ?? "both";
                   return (
@@ -251,6 +293,33 @@ export default function RestTab() {
           </div>
         )}
         {patternMsg && <p className="muted" style={{ marginTop: 6 }}>{patternMsg}</p>}
+        {isParent && (
+          <div style={{ marginTop: 10 }}>
+            {!showHours ? (
+              <button type="button" className="tiny" onClick={() => setShowHours(true)}>
+                shift hours
+              </button>
+            ) : (
+              <>
+                <p className="note">
+                  When each block starts and ends. Outside these — or on a Rest / Family block — the nurses have her, and no feed or cares is counted against you.
+                </p>
+                <div className="shifthours">
+                  {BLOCKS.map((b) => (
+                    <div key={b} style={{ display: "contents" }}>
+                      <label>{b}</label>
+                      <input type="time" value={hours[b][0]} onChange={(e) => saveHours(b, 0, e.target.value)} aria-label={`${b} starts`} />
+                      <input type="time" value={hours[b][1]} onChange={(e) => saveHours(b, 1, e.target.value)} aria-label={`${b} ends`} />
+                    </div>
+                  ))}
+                </div>
+                <button type="button" className="tiny" style={{ marginTop: 8 }} onClick={() => setShowHours(false)}>
+                  done
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {isParent && (
