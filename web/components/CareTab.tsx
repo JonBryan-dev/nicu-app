@@ -10,6 +10,7 @@ import { useFamily } from "@/components/FamilyProvider";
 import { useRealtime } from "@/lib/useRealtime";
 import { uploadPhotos, signedUrlMap } from "@/lib/photos";
 import { fmtHM } from "@/lib/feedSchedule";
+import { isoWeekKey } from "@/lib/dates";
 import {
   CARE_STEPS,
   POSITIONS,
@@ -33,6 +34,12 @@ import {
   dayKey,
   POINTS,
   DEFAULT_CARE_SETTINGS,
+  DEFAULT_BLOCK_HOURS,
+  NO_COVERAGE,
+  parentOnAt,
+  coveredMinutes,
+  roundDue,
+  type Coverage,
   type FeedTick,
   type CareRound,
   type CareTick,
@@ -62,6 +69,7 @@ export default function CareTab() {
   const [planFirst, setPlanFirst] = useState("08:00");
   const [planEvery, setPlanEvery] = useState(120);
   const [planMl, setPlanMl] = useState("");
+  const [cov, setCov] = useState<Coverage>(NO_COVERAGE);
   const [tempInput, setTempInput] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -75,7 +83,7 @@ export default function CareTab() {
   const load = useCallback(async () => {
     if (!isParent) return;
     const since = new Date(Date.now() - 48 * 3600e3).toISOString();
-    const [st, rd, done, bed, fs, ft, hs] = await Promise.all([
+    const [st, rd, done, bed, fs, ft, hs, sb, sd] = await Promise.all([
       supabase.from("care_settings").select("*").eq("family_id", family.id).maybeSingle(),
       supabase
         .from("care_rounds")
@@ -112,6 +120,12 @@ export default function CareTab() {
         .eq("family_id", family.id)
         .not("completed_at", "is", null)
         .order("completed_at", { ascending: true }),
+      supabase
+        .from("shift_blocks")
+        .select("week_key, day_name, block_name, assignee")
+        .eq("family_id", family.id)
+        .in("week_key", [isoWeekKey(dayKey(new Date())), isoWeekKey(dayKey(new Date(Date.now() - 7 * 86400e3)))]),
+      supabase.from("shift_defaults").select("day_name, block_name, assignee").eq("family_id", family.id),
     ]);
     if (rd.error && /care_rounds/.test(rd.error.message)) {
       setErr("Cares need the latest database migration (034) — run it and this page comes alive.");
@@ -135,6 +149,24 @@ export default function CareTab() {
     setFeedTicks((ft.data as unknown as FeedTick[]) ?? []);
     const all = (hs.data as unknown as CareRound[]) ?? [];
     setHist(all);
+    // who's on when — strict block hours, this week's rota, else the usual pattern
+    const hrs = st.data as Record<string, string | null> | null;
+    const h = (k: string, d: string) => (hrs?.[k] ? String(hrs[k]).slice(0, 5) : d);
+    const blocks: Record<string, string> = {};
+    for (const b of (sb.data as { week_key: string; day_name: string; block_name: string; assignee: string }[]) ?? [])
+      blocks[`${b.week_key}-${b.day_name}-${b.block_name}`] = b.assignee;
+    const defaults: Record<string, string> = {};
+    for (const b of (sd.data as { day_name: string; block_name: string; assignee: string }[]) ?? [])
+      defaults[`${b.day_name}-${b.block_name}`] = b.assignee;
+    setCov({
+      blocks,
+      defaults,
+      hours: {
+        AM: [h("am_from", DEFAULT_BLOCK_HOURS.AM[0]), h("am_to", DEFAULT_BLOCK_HOURS.AM[1])],
+        PM: [h("pm_from", DEFAULT_BLOCK_HOURS.PM[0]), h("pm_to", DEFAULT_BLOCK_HOURS.PM[1])],
+        Eve: [h("eve_from", DEFAULT_BLOCK_HOURS.Eve[0]), h("eve_to", DEFAULT_BLOCK_HOURS.Eve[1])],
+      },
+    });
     // rounds finished before steps_done existed: count their ticks (last 7 days only)
     const weekAgo = Date.now() - 7 * 86400e3;
     const needIds = all.filter((r) => r.steps_done == null && +new Date(r.completed_at!) > weekAgo).map((r) => r.id);
@@ -162,6 +194,7 @@ export default function CareTab() {
   useRealtime(supabase, "care_ticks", family.id, load);
   useRealtime(supabase, "care_settings", family.id, load);
   useRealtime(supabase, "feed_ticks", family.id, load);
+  useRealtime(supabase, "shift_blocks", family.id, load);
   useEffect(() => {
     const t = setInterval(() => setClock((c) => c + 1), 60_000);
     return () => clearInterval(t);
@@ -180,9 +213,7 @@ export default function CareTab() {
   // ---- derived ----
   const open = rounds?.find((r) => !r.completed_at) ?? null;
   const completed = (rounds ?? []).filter((r) => r.completed_at);
-  const dueAt = lastDone?.completed_at
-    ? new Date(+new Date(lastDone.completed_at) + settings.round_interval_min * 60000)
-    : null;
+  const dueAt = roundDue(lastDone, settings.round_interval_min, cov);
   const due = dueAt ? dueLabel(dueAt) : null;
   const suggestedPos = nextPosition(lastDone?.position ?? null);
   const suggestedFoot = otherFoot(lastDone?.foot ?? null);
@@ -214,25 +245,29 @@ export default function CareTab() {
   // the button targets the current slot until it's ticked, then the next one
   const feedTarget = feedNow ? (currentTick ? feedNow.next : feedNow.current) : null;
   const feedDue = feedTarget ? dueLabel(feedTarget, now) : null;
-  const dotState = (slot: Date): "done" | "late" | "missed" | "now" | "todo" => {
+  const onAt = (d: Date) => parentOnAt(cov, d);
+  const dotState = (slot: Date): "done" | "late" | "missed" | "now" | "todo" | "nurses" => {
     const tk = tickByDue.get(+slot);
     if (tk) return feedOnTime(tk) ? "done" : "late";
+    if (!onAt(slot)) return "nurses";
     if (feedNow && +slot === +feedNow.current) return "now";
     if (+now - +slot > settings.feed_late_min * 60000) return "missed";
     return "todo";
   };
+  const slotsMine = slotsToday.filter(onAt); // the feeds that are yours today
   const fedToday = slotsToday.filter((s) => tickByDue.has(+s)).length;
-  const onTimeToday = slotsToday.filter((s) => { const k = tickByDue.get(+s); return k && feedOnTime(k); }).length;
+  const onTimeToday = slotsMine.filter((s) => { const k = tickByDue.get(+s); return k && feedOnTime(k); }).length;
+  const targetCovered = feedTarget ? onAt(feedTarget) : true;
   const mlToday = Math.round(slotsToday.reduce((a, s) => a + (tickByDue.get(+s)?.ml ?? 0), 0) * 10) / 10;
-  const streak = feedPlan ? feedStreak(feedPlan.first, feedPlan.every, feedTicks, now) : 0;
-  const roundsPerDay = Math.max(1, Math.round(1440 / settings.round_interval_min));
+  const streak = feedPlan ? feedStreak(feedPlan.first, feedPlan.every, feedTicks, now, cov) : 0;
+  const roundsPerDay = Math.round(coveredMinutes(cov, now) / settings.round_interval_min);
   const roundsToday = completed.filter((r) => new Date(r.completed_at!).toDateString() === todayKey).length;
 
   // ---- scoring ----
   const stepsFor = (r: CareRound) => r.steps_done ?? stepCounts[r.id] ?? 0;
   const scoreOf = new Map<string, ReturnType<typeof scoreRound>>();
-  hist.forEach((r, i) => scoreOf.set(r.id, scoreRound(r, i > 0 ? hist[i - 1] : null, settings.round_interval_min, stepsFor(r))));
-  const roundStreak = careStreak(hist, settings.round_interval_min);
+  hist.forEach((r, i) => scoreOf.set(r.id, scoreRound(r, i > 0 ? hist[i - 1] : null, settings.round_interval_min, stepsFor(r), cov)));
+  const roundStreak = careStreak(hist, settings.round_interval_min, cov);
   const todayK = dayKey(now);
   const feedPointsOn = (k: string) =>
     feedTicks.filter((x) => dayKey(new Date(x.due_at)) === k).reduce((a, x) => a + feedTickPoints(x), 0);
@@ -242,7 +277,7 @@ export default function CareTab() {
   const lifetimePoints =
     feedTicks.reduce((a, x) => a + feedTickPoints(x), 0) + hist.reduce((a, r) => a + (scoreOf.get(r.id)?.points ?? 0), 0);
   const level = levelFor(lifetimePoints, first);
-  const badges = computeBadges({ rounds: hist, stepsFor, ticks: feedTicks, feedPlan, feedStreak: streak, now });
+  const badges = computeBadges({ rounds: hist, stepsFor, ticks: feedTicks, feedPlan, feedStreak: streak, now, cov });
   const earnedCount = badges.filter((b) => b.earned).length;
   // today's team — who did what
   const tally: Record<string, { feeds: number; rounds: number }> = {};
@@ -271,6 +306,7 @@ export default function CareTab() {
       slots,
       tracked: slots.length > 0 && +slots[slots.length - 1] >= firstTickMs,
       rounds: hist.filter((r) => dayKey(new Date(r.completed_at!)) === k).length,
+      expected: Math.round(coveredMinutes(cov, d) / settings.round_interval_min),
       points: feedPointsOn(k) + roundPointsOn(k),
       isToday: k === todayK,
     };
@@ -674,7 +710,7 @@ export default function CareTab() {
       {/* feeds: the ward's grid, one tick each */}
       {feedPlan && feedNow && feedTarget && feedDue && (
         <div className="card">
-          <h2>{currentTick ? "Next feed" : "Feed"}</h2>
+          <h2>{!targetCovered ? "Nurses' feed" : currentTick ? "Next feed" : "Feed"}</h2>
           <div className="caredue">
             <div className={`big ${feedDue.state}`}>{fmtHM(feedTarget)}</div>
             <div className="muted">
@@ -683,15 +719,16 @@ export default function CareTab() {
                 : feedDue.text}
               {" · every "}
               {Math.round((feedPlan.every / 60) * 10) / 10}h{feedPlan.ml ? ` · ${feedPlan.ml} ml` : ""}
+              {!targetCovered ? " · outside your shift — the nurses have her" : ""}
             </div>
           </div>
           <div className="row" style={{ alignItems: "stretch" }}>
             <button
-              className={currentTick ? "ghost" : "primary"}
+              className={currentTick || !targetCovered ? "ghost" : "primary"}
               onClick={() => tickFeed(feedTarget)}
               style={{ flex: 1 }}
             >
-              ✓ {currentTick ? `Mark ${fmtHM(feedTarget)} fed` : `Fed — ${fmtHM(feedTarget)}`}
+              ✓ {!targetCovered ? `Did the ${fmtHM(feedTarget)} feed yourself?` : currentTick ? `Mark ${fmtHM(feedTarget)} fed` : `Fed — ${fmtHM(feedTarget)}`}
             </button>
             <div style={{ flex: "0 0 92px" }}>
               <input
@@ -709,14 +746,14 @@ export default function CareTab() {
             {slotsToday.map((s) => {
               const st = dotState(s);
               const tk = tickByDue.get(+s);
-              const future = st === "todo" && s > now;
+              const future = !tk && s > now;
               return (
                 <button
                   key={+s}
                   type="button"
                   className={`dot ${st}`}
                   disabled={future}
-                  title={`${fmtHM(s)} — ${st === "done" ? "on time" : st === "late" ? "ticked late" : st === "missed" ? "not ticked" : st === "now" ? "due now" : "later"}`}
+                  title={`${fmtHM(s)} — ${st === "done" ? "on time" : st === "late" ? "ticked late" : st === "missed" ? "not ticked" : st === "now" ? "due now" : st === "nurses" ? "nurses' feed" : "later"}`}
                   aria-label={`${fmtHM(s)} feed, ${st}`}
                   onClick={() => (tk ? untickFeed(tk) : tickFeed(s))}
                 />
@@ -725,10 +762,10 @@ export default function CareTab() {
           </div>
           <div className="dotlabel">
             <span>
-              <b>{fedToday}</b> of {slotsToday.length} today · <b>{onTimeToday}</b> on time
+              <b>{fedToday}</b> ticked · <b>{onTimeToday}</b> of your {slotsMine.length} on time
               {mlToday > 0 ? <> · <b>{mlToday}</b> ml</> : null}
             </span>
-            <span>tap a dot to tick or untick</span>
+            <span>dashed = nurses&apos; time</span>
           </div>
         </div>
       )}
@@ -743,8 +780,8 @@ export default function CareTab() {
         {feedPlan && (
           <>
             <div className="dotlabel" style={{ marginTop: 6 }}>
-              <span>Feeds</span>
-              <span><b>{fedToday}</b> / {slotsToday.length}</span>
+              <span>Feeds <span className="muted">(yours today)</span></span>
+              <span><b>{slotsMine.filter((s) => tickByDue.has(+s)).length}</b> / {slotsMine.length}</span>
             </div>
             <div className="dots">
               {slotsToday.map((s) => (
@@ -754,14 +791,18 @@ export default function CareTab() {
           </>
         )}
         <div className="dotlabel">
-          <span>Cares rounds</span>
+          <span>Cares rounds <span className="muted">(your shifts)</span></span>
           <span><b>{roundsToday}</b> / {roundsPerDay}</span>
         </div>
-        <div className="dots">
-          {Array.from({ length: roundsPerDay }, (_, i) => (
-            <span key={i} className={`dot ${i < roundsToday ? "done" : "todo"}`} style={{ width: 14, height: 14, cursor: "default" }} />
-          ))}
-        </div>
+        {roundsPerDay > 0 ? (
+          <div className="dots">
+            {Array.from({ length: Math.max(roundsPerDay, roundsToday) }, (_, i) => (
+              <span key={i} className={`dot ${i < roundsToday ? "done" : "todo"}`} style={{ width: 14, height: 14, cursor: "default" }} />
+            ))}
+          </div>
+        ) : (
+          <p className="muted" style={{ fontSize: "0.85rem" }}>Day off — the nurses have her today. Anything you do still counts.</p>
+        )}
         <div className="streaks">
           {feedPlan && (
             <div className="streak">
@@ -785,7 +826,7 @@ export default function CareTab() {
           </div>
         )}
         <p className="muted" style={{ marginTop: 8 }}>
-          Feeds {POINTS.feedOnTime} on time / {POINTS.feedLate} late · rounds {POINTS.round}, +{POINTS.roundOnTime} within the hour, +{POINTS.fullRound} full house, +{POINTS.bedding} fresh bedding, +{POINTS.photo} a photo. On time = {FEED_ON_TIME_MIN} min for feeds, {CARE_ON_TIME_MIN} for rounds.
+          Feeds {POINTS.feedOnTime} on time / {POINTS.feedLate} late · rounds {POINTS.round}, +{POINTS.roundOnTime} within the hour, +{POINTS.fullRound} full house, +{POINTS.bedding} fresh bedding, +{POINTS.photo} a photo. On time = {FEED_ON_TIME_MIN} min for feeds, {CARE_ON_TIME_MIN} for rounds. Outside your shifts the nurses have her — nothing then is held against you.
         </p>
       </div>
 
@@ -828,7 +869,7 @@ export default function CareTab() {
                   ? w.slots.map((s) => <span key={+s} className={`dot mini ${dotState(s)}`} />)
                   : <span className="muted" style={{ fontSize: "0.78rem" }}>{feedPlan ? "before feeds were tracked" : "no feed plan"}</span>}
               </span>
-              <span className="weeknum">{w.rounds} rnd{w.rounds === 1 ? "" : "s"}</span>
+              <span className="weeknum">{w.rounds}/{w.expected} rnd</span>
               <span className="weeknum pts">{w.points}</span>
             </div>
           ))}

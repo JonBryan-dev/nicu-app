@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useRealtime } from "@/lib/useRealtime";
 
-const DAYS_BACK = 21;
+const WINDOWS = [21, 42, 84, 365] as const; // 3 weeks · 6 weeks · 12 weeks · the lot
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 type Day = { date: string; ml: number };
@@ -35,11 +35,12 @@ export default function PumpHistory({
 }) {
   const [days, setDays] = useState<Day[]>([]);
   const [sessions, setSessions] = useState(0);
+  const [daysBack, setDaysBack] = useState<number>(21);
 
   const load = useCallback(async () => {
     const since = new Date();
     since.setHours(0, 0, 0, 0);
-    since.setDate(since.getDate() - (DAYS_BACK - 1));
+    since.setDate(since.getDate() - (daysBack - 1));
     const sinceIso = since.toISOString();
     const [fd, ex] = await Promise.all([
       supabase.from("feeds").select("ml, started_at").eq("family_id", familyId).gte("started_at", sinceIso),
@@ -53,7 +54,7 @@ export default function PumpHistory({
       if (r.ml) { totals[localDay(r.at)] = (totals[localDay(r.at)] ?? 0) + r.ml; count++; }
     // fill every day in the window (0 for blanks) so gaps show honestly
     const out: Day[] = [];
-    for (let i = 0; i < DAYS_BACK; i++) {
+    for (let i = 0; i < daysBack; i++) {
       const d = new Date(since);
       d.setDate(d.getDate() + i);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -61,7 +62,7 @@ export default function PumpHistory({
     }
     setDays(out);
     setSessions(count);
-  }, [supabase, familyId]);
+  }, [supabase, familyId, daysBack]);
 
   useEffect(() => {
     load();
@@ -112,6 +113,13 @@ export default function PumpHistory({
     return (
       <div className="card">
         <h2>Pumping history</h2>
+      <div className="chips" aria-label="How far back">
+        {WINDOWS.map((w) => (
+          <button key={w} type="button" className={`careopt ${daysBack === w ? "on" : ""}`} onClick={() => setDaysBack(w)}>
+            {w === 21 ? "3 weeks" : w === 42 ? "6 weeks" : w === 84 ? "12 weeks" : "All"}
+          </button>
+        ))}
+      </div>
         <p className="muted">A few days of logs and your picture builds here — with the numbers worth celebrating, not just a line.</p>
       </div>
     );

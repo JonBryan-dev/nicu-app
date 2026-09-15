@@ -1760,3 +1760,23 @@ select {
 .dot.mini { width: 11px; height: 11px; border-width: 1.5px; cursor: default; }
 .weeknum { text-align: right; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .weeknum.pts { font-weight: 700; color: var(--ink); }
+/* nurses' time — outside a parent shift, never held against you */
+.dot.nurses {
+  border-style: dashed;
+  border-color: var(--ink-soft);
+  opacity: 0.55;
+}
+.shifthours {
+  display: grid;
+  grid-template-columns: 44px 1fr 1fr;
+  gap: 6px 10px;
+  align-items: center;
+  margin-top: 8px;
+}
+.shifthours label { margin: 0; }
+.shift th small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
