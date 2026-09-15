@@ -19,7 +19,13 @@ import {
   tempFlag,
   dueLabel,
   hoursAgo,
+  feedSlots,
+  feedSlotNow,
+  feedOnTime,
+  feedStreak,
+  FEED_ON_TIME_MIN,
   DEFAULT_CARE_SETTINGS,
+  type FeedTick,
   type CareRound,
   type CareTick,
   type CareSettings,
@@ -39,7 +45,8 @@ export default function CareTab() {
   const [lastBedding, setLastBedding] = useState<CareRound | null>(null);
   const [ticks, setTicks] = useState<CareTick[]>([]);
   const [urls, setUrls] = useState<Record<string, string>>({});
-  const [feedEvery, setFeedEvery] = useState<number | null>(null);
+  const [feedPlan, setFeedPlan] = useState<{ first: string; every: number; ml: number | null } | null>(null);
+  const [feedTicks, setFeedTicks] = useState<FeedTick[]>([]);
   const [tempInput, setTempInput] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,7 +60,7 @@ export default function CareTab() {
   const load = useCallback(async () => {
     if (!isParent) return;
     const since = new Date(Date.now() - 48 * 3600e3).toISOString();
-    const [st, rd, done, bed, fs] = await Promise.all([
+    const [st, rd, done, bed, fs, ft] = await Promise.all([
       supabase.from("care_settings").select("*").eq("family_id", family.id).maybeSingle(),
       supabase
         .from("care_rounds")
@@ -78,7 +85,13 @@ export default function CareTab() {
         .order("completed_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      supabase.from("feed_settings").select("baby_interval_min").eq("family_id", family.id).maybeSingle(),
+      supabase.from("feed_settings").select("baby_first_feed, baby_interval_min, baby_ml").eq("family_id", family.id).maybeSingle(),
+      supabase
+        .from("feed_ticks")
+        .select("*, doer:profiles!feed_ticks_done_by_fkey(display_name)")
+        .eq("family_id", family.id)
+        .gte("due_at", new Date(Date.now() - 8 * 86400e3).toISOString())
+        .order("due_at", { ascending: false }),
     ]);
     if (rd.error && /care_rounds/.test(rd.error.message)) {
       setErr("Cares need the latest database migration (034) — run it and this page comes alive.");
@@ -90,7 +103,13 @@ export default function CareTab() {
     setRounds(rs);
     setLastDone((done.data as unknown as CareRound) ?? null);
     setLastBedding((bed.data as unknown as CareRound) ?? null);
-    setFeedEvery(fs.data?.baby_interval_min ?? null);
+    const plan = fs.data as { baby_first_feed: string | null; baby_interval_min: number | null; baby_ml: number | null } | null;
+    setFeedPlan(
+      plan?.baby_first_feed && plan.baby_interval_min
+        ? { first: plan.baby_first_feed.slice(0, 5), every: plan.baby_interval_min, ml: plan.baby_ml ?? null }
+        : null
+    );
+    setFeedTicks((ft.data as unknown as FeedTick[]) ?? []);
     const open = rs.find((r) => !r.completed_at);
     if (open) {
       const { data: tk } = await supabase.from("care_ticks").select("*").eq("round_id", open.id);
@@ -108,6 +127,7 @@ export default function CareTab() {
   useRealtime(supabase, "care_rounds", family.id, load);
   useRealtime(supabase, "care_ticks", family.id, load);
   useRealtime(supabase, "care_settings", family.id, load);
+  useRealtime(supabase, "feed_ticks", family.id, load);
   useEffect(() => {
     const t = setInterval(() => setClock((c) => c + 1), 60_000);
     return () => clearInterval(t);
@@ -152,6 +172,26 @@ export default function CareTab() {
   };
   const doneCount = CARE_STEPS.filter(stepDone).length;
   const todayKey = new Date().toDateString();
+  const now = new Date();
+  const tickByDue = new Map(feedTicks.map((t) => [+new Date(t.due_at), t]));
+  const slotsToday = feedPlan ? feedSlots(feedPlan.first, feedPlan.every, now) : [];
+  const feedNow = feedPlan ? feedSlotNow(feedPlan.first, feedPlan.every, now) : null;
+  const currentTick = feedNow ? tickByDue.get(+feedNow.current) : undefined;
+  // the button targets the current slot until it's ticked, then the next one
+  const feedTarget = feedNow ? (currentTick ? feedNow.next : feedNow.current) : null;
+  const feedDue = feedTarget ? dueLabel(feedTarget, now) : null;
+  const dotState = (slot: Date): "done" | "late" | "missed" | "now" | "todo" => {
+    const tk = tickByDue.get(+slot);
+    if (tk) return feedOnTime(tk) ? "done" : "late";
+    if (feedNow && +slot === +feedNow.current) return "now";
+    if (+now - +slot > settings.feed_late_min * 60000) return "missed";
+    return "todo";
+  };
+  const fedToday = slotsToday.filter((s) => tickByDue.has(+s)).length;
+  const onTimeToday = slotsToday.filter((s) => { const k = tickByDue.get(+s); return k && feedOnTime(k); }).length;
+  const streak = feedPlan ? feedStreak(feedPlan.first, feedPlan.every, feedTicks, now) : 0;
+  const roundsPerDay = Math.max(1, Math.round(1440 / settings.round_interval_min));
+  const roundsToday = completed.filter((r) => new Date(r.completed_at!).toDateString() === todayKey).length;
 
   // ---- actions ----
   async function startRound() {
@@ -232,6 +272,21 @@ export default function CareTab() {
     load();
   }
 
+  async function tickFeed(slot: Date) {
+    setErr("");
+    const { error } = await supabase.from("feed_ticks").upsert(
+      { family_id: family.id, due_at: slot.toISOString(), done_by: profile.id, ml: feedPlan?.ml ?? null },
+      { onConflict: "family_id,due_at" }
+    );
+    if (error) setErr(/feed_ticks/.test(error.message) ? "Feed ticks need database migration 035." : error.message);
+    load();
+  }
+  async function untickFeed(t: FeedTick) {
+    if (!window.confirm(`Untick the ${fmtHM(new Date(t.due_at))} feed?`)) return;
+    await supabase.from("feed_ticks").delete().eq("id", t.id);
+    load();
+  }
+
   async function saveSettings(next: Partial<CareSettings>) {
     const merged = { ...settings, ...next };
     setSettings(merged);
@@ -281,7 +336,7 @@ export default function CareTab() {
             </button>
             <p className="muted" style={{ marginTop: 8 }}>
               Every {intervalH}h
-              {feedEvery ? ` · feeds every ${Math.round((feedEvery / 60) * 10) / 10}h` : ""}
+              {feedPlan ? ` · feeds every ${Math.round((feedPlan.every / 60) * 10) / 10}h` : ""}
               {" · bedding "}
               {lastBedding?.completed_at ? `changed ${hoursAgo(lastBedding.completed_at)}` : "not logged yet"}
               {beddingDue && lastBedding ? " ⚠ change due" : ""}
@@ -290,6 +345,52 @@ export default function CareTab() {
         )}
         {err && <p className="err">{err}</p>}
       </div>
+
+      {/* feeds: the ward's grid, one tick each */}
+      {feedPlan && feedNow && feedTarget && feedDue && (
+        <div className="card">
+          <h2>{currentTick ? "Next feed" : "Feed"}</h2>
+          <div className="caredue">
+            <div className={`big ${feedDue.state}`}>{fmtHM(feedTarget)}</div>
+            <div className="muted">
+              {currentTick
+                ? `${fmtHM(new Date(currentTick.due_at))} ticked${currentTick.doer ? ` by ${currentTick.doer.display_name}` : ""} · next ${feedDue.text}`
+                : feedDue.text}
+              {" · every "}
+              {Math.round((feedPlan.every / 60) * 10) / 10}h{feedPlan.ml ? ` · ${feedPlan.ml} ml` : ""}
+            </div>
+          </div>
+          <button
+            className={currentTick ? "ghost" : "primary"}
+            onClick={() => tickFeed(feedTarget)}
+            style={currentTick ? { width: "100%" } : undefined}
+          >
+            ✓ {currentTick ? `Mark ${fmtHM(feedTarget)} fed` : `Fed — ${fmtHM(feedTarget)}`}
+          </button>
+          <div className="dots" aria-label="Today's feeds">
+            {slotsToday.map((s) => {
+              const st = dotState(s);
+              const tk = tickByDue.get(+s);
+              const future = st === "todo" && s > now;
+              return (
+                <button
+                  key={+s}
+                  type="button"
+                  className={`dot ${st}`}
+                  disabled={future}
+                  title={`${fmtHM(s)} — ${st === "done" ? "on time" : st === "late" ? "ticked late" : st === "missed" ? "not ticked" : st === "now" ? "due now" : "later"}`}
+                  aria-label={`${fmtHM(s)} feed, ${st}`}
+                  onClick={() => (tk ? untickFeed(tk) : tickFeed(s))}
+                />
+              );
+            })}
+          </div>
+          <div className="dotlabel">
+            <span><b>{fedToday}</b> of {slotsToday.length} today · <b>{onTimeToday}</b> on time</span>
+            <span>tap a dot to tick or untick</span>
+          </div>
+        </div>
+      )}
 
       {/* the round itself */}
       {open && (
@@ -453,6 +554,41 @@ export default function CareTab() {
         </div>
       )}
 
+      {/* today, at a glance */}
+      <div className="card">
+        <h2>Today</h2>
+        {feedPlan && (
+          <>
+            <div className="dotlabel" style={{ marginTop: 0 }}>
+              <span>Feeds</span>
+              <span><b>{fedToday}</b> / {slotsToday.length}</span>
+            </div>
+            <div className="dots">
+              {slotsToday.map((s) => (
+                <span key={+s} className={`dot ${dotState(s)}`} style={{ width: 14, height: 14, cursor: "default" }} />
+              ))}
+            </div>
+          </>
+        )}
+        <div className="dotlabel">
+          <span>Cares rounds</span>
+          <span><b>{roundsToday}</b> / {roundsPerDay}</span>
+        </div>
+        <div className="dots">
+          {Array.from({ length: roundsPerDay }, (_, i) => (
+            <span key={i} className={`dot ${i < roundsToday ? "done" : "todo"}`} style={{ width: 14, height: 14, cursor: "default" }} />
+          ))}
+        </div>
+        {feedPlan && (
+          <div className="streak">
+            {streak > 0 ? `🔥 ${streak} feed${streak === 1 ? "" : "s"} on time in a row` : "Tick the next feed on time to start a streak"}
+          </div>
+        )}
+        <p className="muted" style={{ marginTop: 6 }}>
+          On time = ticked within {FEED_ON_TIME_MIN} minutes of the slot. Every tick is one you both can see.
+        </p>
+      </div>
+
       {/* the record */}
       <div className="card">
         <h2>Last 48 hours</h2>
@@ -543,8 +679,27 @@ export default function CareTab() {
                 </select>
               </div>
             </div>
+            {feedPlan && (
+              <div className="row rowwrap" style={{ marginTop: 10 }}>
+                <div>
+                  <label htmlFor="cs-feeds">Feed reminders</label>
+                  <select id="cs-feeds" value={settings.notify_feeds ? "on" : "off"} onChange={(e) => saveSettings({ notify_feeds: e.target.value === "on" })}>
+                    <option value="on">On — at each feed time</option>
+                    <option value="off">Off</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="cs-flate">Feed “still waiting” after</label>
+                  <select id="cs-flate" value={settings.feed_late_min} onChange={(e) => saveSettings({ feed_late_min: +e.target.value })}>
+                    <option value={15}>15 min</option>
+                    <option value={30}>30 min</option>
+                    <option value={45}>45 min</option>
+                  </select>
+                </div>
+              </div>
+            )}
             <p className="muted" style={{ marginTop: 8 }}>
-              The next round is timed from when the last one was finished. Whoever finishes a round, the other parent gets a note with the temperature and position.
+              Feed times follow the unit&apos;s plan set in Feeds ({feedPlan ? `${feedPlan.first}, every ${Math.round((feedPlan.every / 60) * 10) / 10}h` : "not set yet"}). The next cares round is timed from when the last one was finished. Whoever finishes a round, the other parent gets a note with the temperature and position.
             </p>
             <button className="tiny" style={{ marginTop: 8 }} onClick={() => setShowSettings(false)}>
               Done

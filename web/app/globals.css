@@ -1651,3 +1651,40 @@ select {
   border-radius: 8px;
   cursor: pointer;
 }
+/* today's dots — one per feed slot / care round */
+.dots {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: 6px 0 2px;
+}
+.dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--mist);
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.dot.done { background: var(--sage); border-color: var(--sage); }
+.dot.late { background: var(--sky); border-color: var(--sky); }
+.dot.missed { border-color: var(--rose); background: color-mix(in srgb, var(--rose) 22%, transparent); }
+.dot.now { border-color: var(--rose-deep); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rose-deep) 25%, transparent); }
+.dot:disabled { cursor: default; }
+.dotlabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin-top: 8px;
+}
+.dotlabel b { color: var(--ink); }
+.streak {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-top: 10px;
+}

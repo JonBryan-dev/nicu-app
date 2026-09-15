@@ -62,12 +62,16 @@ export interface CareSettings {
   bedding_hours: number;
   notify_due: boolean;
   overdue_after_min: number;
+  notify_feeds: boolean;
+  feed_late_min: number;
 }
 export const DEFAULT_CARE_SETTINGS: CareSettings = {
   round_interval_min: 240,
   bedding_hours: 24,
   notify_due: true,
   overdue_after_min: 45,
+  notify_feeds: true,
+  feed_late_min: 30,
 };
 
 export interface CareRound {
@@ -111,4 +115,62 @@ export function hoursAgo(iso: string | null, now: Date = new Date()): string {
   if (mins < 60) return `${mins}m ago`;
   const h = Math.floor(mins / 60);
   return h < 48 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+}
+
+// ---- feeds: the ward's fixed grid, ticked one at a time ----
+export interface FeedTick {
+  id: string;
+  family_id: string;
+  due_at: string;
+  done_at: string;
+  done_by: string | null;
+  ml: number | null;
+  doer?: { display_name: string } | null;
+}
+export const FEED_ON_TIME_MIN = 20;
+
+/** Every feed slot that falls inside one calendar day (local time). */
+export function feedSlots(first: string, intervalMin: number, day: Date = new Date()): Date[] {
+  const [h, m] = first.split(":").map(Number);
+  const dayStart = new Date(day);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  const anchor = new Date(dayStart);
+  anchor.setDate(anchor.getDate() - 1);
+  anchor.setHours(h, m, 0, 0);
+  const out: Date[] = [];
+  for (let t = anchor; t < dayEnd; t = new Date(+t + intervalMin * 60000)) {
+    if (t >= dayStart) out.push(new Date(t));
+  }
+  return out;
+}
+
+/** The slot we're in now (most recent at or before `now`) and the one after. */
+export function feedSlotNow(first: string, intervalMin: number, now: Date = new Date()): { current: Date; next: Date } {
+  const yday = new Date(now);
+  yday.setDate(yday.getDate() - 1);
+  const all = [...feedSlots(first, intervalMin, yday), ...feedSlots(first, intervalMin, now)];
+  let current = all[0];
+  for (const t of all) if (t <= now) current = t;
+  return { current, next: new Date(+current + intervalMin * 60000) };
+}
+
+export const feedOnTime = (t: FeedTick) =>
+  +new Date(t.done_at) - +new Date(t.due_at) <= FEED_ON_TIME_MIN * 60000;
+
+/** Consecutive on-time feeds counting back from the last slot that's had a
+ *  chance to be ticked. A missed slot, or a late tick, ends the run. */
+export function feedStreak(first: string, intervalMin: number, ticks: FeedTick[], now: Date = new Date()): number {
+  const byDue = new Map(ticks.map((t) => [+new Date(t.due_at), t]));
+  const { current } = feedSlotNow(first, intervalMin, now);
+  // don't count the current slot against them until it's actually late
+  let t = +now - +current > FEED_ON_TIME_MIN * 60000 ? +current : +current - intervalMin * 60000;
+  let streak = 0;
+  for (let i = 0; i < 7 * Math.ceil(1440 / intervalMin); i++, t -= intervalMin * 60000) {
+    const tick = byDue.get(t);
+    if (!tick || !feedOnTime(tick)) break;
+    streak++;
+  }
+  return streak;
 }
