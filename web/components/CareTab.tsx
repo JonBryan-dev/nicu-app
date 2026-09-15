@@ -58,6 +58,10 @@ export default function CareTab() {
   const [hist, setHist] = useState<CareRound[]>([]); // every finished round, oldest first
   const [stepCounts, setStepCounts] = useState<Record<string, number>>({});
   const [toast, setToast] = useState<string | null>(null);
+  const [feedMl, setFeedMl] = useState(""); // what she actually had; prefilled from the plan
+  const [planFirst, setPlanFirst] = useState("08:00");
+  const [planEvery, setPlanEvery] = useState(120);
+  const [planMl, setPlanMl] = useState("");
   const [tempInput, setTempInput] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -125,6 +129,9 @@ export default function CareTab() {
         ? { first: plan.baby_first_feed.slice(0, 5), every: plan.baby_interval_min, ml: plan.baby_ml ?? null }
         : null
     );
+    if (plan?.baby_ml != null) setFeedMl((cur) => (cur === "" ? String(plan.baby_ml) : cur));
+    if (plan?.baby_interval_min) setPlanEvery(plan.baby_interval_min);
+    if (plan?.baby_ml != null) setPlanMl(String(plan.baby_ml));
     setFeedTicks((ft.data as unknown as FeedTick[]) ?? []);
     const all = (hs.data as unknown as CareRound[]) ?? [];
     setHist(all);
@@ -216,6 +223,7 @@ export default function CareTab() {
   };
   const fedToday = slotsToday.filter((s) => tickByDue.has(+s)).length;
   const onTimeToday = slotsToday.filter((s) => { const k = tickByDue.get(+s); return k && feedOnTime(k); }).length;
+  const mlToday = Math.round(slotsToday.reduce((a, s) => a + (tickByDue.get(+s)?.ml ?? 0), 0) * 10) / 10;
   const streak = feedPlan ? feedStreak(feedPlan.first, feedPlan.every, feedTicks, now) : 0;
   const roundsPerDay = Math.max(1, Math.round(1440 / settings.round_interval_min));
   const roundsToday = completed.filter((r) => new Date(r.completed_at!).toDateString() === todayKey).length;
@@ -369,7 +377,12 @@ export default function CareTab() {
   async function tickFeed(slot: Date) {
     setErr("");
     const { error } = await supabase.from("feed_ticks").upsert(
-      { family_id: family.id, due_at: slot.toISOString(), done_by: profile.id, ml: feedPlan?.ml ?? null },
+      {
+        family_id: family.id,
+        due_at: slot.toISOString(),
+        done_by: profile.id,
+        ml: feedMl.trim() ? parseFloat(feedMl.replace(",", ".")) : (feedPlan?.ml ?? null),
+      },
       { onConflict: "family_id,due_at" }
     );
     if (error) setErr(/feed_ticks/.test(error.message) ? "Feed ticks need database migration 035." : error.message);
@@ -382,6 +395,20 @@ export default function CareTab() {
   async function untickFeed(t: FeedTick) {
     if (!window.confirm(`Untick the ${fmtHM(new Date(t.due_at))} feed?`)) return;
     await supabase.from("feed_ticks").delete().eq("id", t.id);
+    load();
+  }
+
+  async function savePlan(e: React.FormEvent) {
+    e.preventDefault();
+    setErr("");
+    const { error } = await supabase.from("feed_settings").upsert({
+      family_id: family.id,
+      baby_first_feed: planFirst,
+      baby_interval_min: planEvery,
+      baby_ml: planMl.trim() ? parseFloat(planMl.replace(",", ".")) : null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) setErr("Plan didn't save: " + error.message);
     load();
   }
 
@@ -439,7 +466,7 @@ export default function CareTab() {
             </button>
             <p className="muted" style={{ marginTop: 8 }}>
               Every {intervalH}h
-              {feedPlan ? ` · feeds every ${Math.round((feedPlan.every / 60) * 10) / 10}h` : ""}
+              {feedPlan ? ` · feeds every ${Math.round((feedPlan.every / 60) * 10) / 10}h` : " · feed plan not set yet — see below"}
               {" · bedding "}
               {lastBedding?.completed_at ? `changed ${hoursAgo(lastBedding.completed_at)}` : "not logged yet"}
               {beddingDue && lastBedding ? " ⚠ change due" : ""}
@@ -611,6 +638,39 @@ export default function CareTab() {
         </div>
       )}
 
+      {/* no feed plan yet — set it here, it's the same one Feeds uses */}
+      {rounds !== null && !feedPlan && (
+        <form className="card" onSubmit={savePlan}>
+          <h2>Feeds</h2>
+          <p className="note">
+            Tell it the unit&apos;s plan — first feed of the day and how often — and every feed appears here to tick, with reminders.
+          </p>
+          <div className="row rowwrap">
+            <div>
+              <label htmlFor="fp-first">First feed</label>
+              <input id="fp-first" type="time" value={planFirst} onChange={(e) => setPlanFirst(e.target.value)} required />
+            </div>
+            <div>
+              <label htmlFor="fp-every">How often</label>
+              <select id="fp-every" value={planEvery} onChange={(e) => setPlanEvery(+e.target.value)}>
+                <option value={60}>Hourly</option>
+                <option value={90}>1½-hourly</option>
+                <option value={120}>2-hourly</option>
+                <option value={180}>3-hourly</option>
+                <option value={240}>4-hourly</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="fp-ml">ml per feed</label>
+              <input id="fp-ml" type="text" inputMode="decimal" value={planMl} onChange={(e) => setPlanMl(e.target.value)} placeholder="35" />
+            </div>
+          </div>
+          <button className="primary" type="submit" style={{ marginTop: 12 }}>
+            Save feed plan
+          </button>
+        </form>
+      )}
+
       {/* feeds: the ward's grid, one tick each */}
       {feedPlan && feedNow && feedTarget && feedDue && (
         <div className="card">
@@ -625,13 +685,26 @@ export default function CareTab() {
               {Math.round((feedPlan.every / 60) * 10) / 10}h{feedPlan.ml ? ` · ${feedPlan.ml} ml` : ""}
             </div>
           </div>
-          <button
-            className={currentTick ? "ghost" : "primary"}
-            onClick={() => tickFeed(feedTarget)}
-            style={currentTick ? { width: "100%" } : undefined}
-          >
-            ✓ {currentTick ? `Mark ${fmtHM(feedTarget)} fed` : `Fed — ${fmtHM(feedTarget)}`}
-          </button>
+          <div className="row" style={{ alignItems: "stretch" }}>
+            <button
+              className={currentTick ? "ghost" : "primary"}
+              onClick={() => tickFeed(feedTarget)}
+              style={{ flex: 1 }}
+            >
+              ✓ {currentTick ? `Mark ${fmtHM(feedTarget)} fed` : `Fed — ${fmtHM(feedTarget)}`}
+            </button>
+            <div style={{ flex: "0 0 92px" }}>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={feedMl}
+                onChange={(e) => setFeedMl(e.target.value)}
+                placeholder={feedPlan.ml ? String(feedPlan.ml) : "ml"}
+                aria-label="Millilitres she had"
+                style={{ textAlign: "center" }}
+              />
+            </div>
+          </div>
           <div className="dots" aria-label="Today's feeds">
             {slotsToday.map((s) => {
               const st = dotState(s);
@@ -651,7 +724,10 @@ export default function CareTab() {
             })}
           </div>
           <div className="dotlabel">
-            <span><b>{fedToday}</b> of {slotsToday.length} today · <b>{onTimeToday}</b> on time</span>
+            <span>
+              <b>{fedToday}</b> of {slotsToday.length} today · <b>{onTimeToday}</b> on time
+              {mlToday > 0 ? <> · <b>{mlToday}</b> ml</> : null}
+            </span>
             <span>tap a dot to tick or untick</span>
           </div>
         </div>

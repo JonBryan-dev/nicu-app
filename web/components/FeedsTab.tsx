@@ -395,7 +395,7 @@ export default function FeedsTab() {
           </p>
         ) : (
           <p style={{ fontWeight: 600 }}>
-            🍼 every {Math.round((settings.baby_interval_min / 60) * 10) / 10}h · {settings.baby_ml ?? "?"} ml each ·{" "}
+            🍼 every {Math.round((settings.baby_interval_min / 60) * 10) / 10}h{settings.baby_first_feed ? ` from ${settings.baby_first_feed.slice(0, 5)}` : ""} · {settings.baby_ml ?? "?"} ml each ·{" "}
             {babyFeedsPerDay(settings)} feeds ≈ <b>{babyNeedsPerDay || "?"} ml/day</b>
           </p>
         )}
@@ -645,7 +645,19 @@ export default function FeedsTab() {
                 <label>ml per feed</label>
                 <input type="text" inputMode="decimal" defaultValue={settings.baby_ml ?? ""} onBlur={(e) => saveSettings({ baby_ml: e.target.value ? +e.target.value : null })} placeholder="40" />
               </div>
+              <div>
+                <label>First feed</label>
+                <input
+                  type="time"
+                  value={settings.baby_first_feed?.slice(0, 5) ?? ""}
+                  onChange={(e) => saveSettings({ baby_first_feed: e.target.value || null })}
+                  aria-label="Time of the first feed of the day"
+                />
+              </div>
             </div>
+            <p className="muted" style={{ marginTop: 6 }}>
+              First feed + how often = her feed times for the day. The Cares tab uses them for the Fed tick and reminders.
+            </p>
 
             <h3>Your pumping</h3>
             <div className="row rowwrap">
