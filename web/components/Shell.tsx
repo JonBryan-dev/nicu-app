@@ -50,6 +50,7 @@ const TABS = [
   { href: "/", label: "Updates", icon: "✦" },
   { href: "/journal", label: "Journal", icon: "📓", parentOnly: true },
   { href: "/feeds", label: "Feeds", icon: "🍼", parentOnly: true },
+  { href: "/cares", label: "Cares", icon: "🧸", parentOnly: true },
   { href: "/gas", label: "Gas", icon: "🩸", parentOnly: true },
   // Dad's own corner. Hidden unless he's said he's dad; what he logs behind it
   // is private to him by RLS, not by this flag.
