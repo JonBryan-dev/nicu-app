@@ -41,6 +41,15 @@ import {
   roundDue,
   type Coverage,
   type FeedTick,
+  NAPPY_OPTS,
+  SICK_OPTS,
+  PH_OK_MAX,
+  NOTE_POINTS,
+  NOTE_POINTS_CAP_PER_DAY,
+  noteGist,
+  type CareNote,
+  type Nappy,
+  type Sick,
   type CareRound,
   type CareTick,
   type CareSettings,
@@ -70,6 +79,13 @@ export default function CareTab() {
   const [planEvery, setPlanEvery] = useState(120);
   const [planMl, setPlanMl] = useState("");
   const [cov, setCov] = useState<Coverage>(NO_COVERAGE);
+  const [notes, setNotes] = useState<CareNote[]>([]); // every note, newest first
+  const [nNappy, setNNappy] = useState<Nappy | null>(null);
+  const [nPh, setNPh] = useState("");
+  const [nWell, setNWell] = useState<boolean | null>(null);
+  const [nSick, setNSick] = useState<Sick | null>(null);
+  const [nBody, setNBody] = useState("");
+  const [nFlag, setNFlag] = useState(false);
   const [tempInput, setTempInput] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -83,7 +99,7 @@ export default function CareTab() {
   const load = useCallback(async () => {
     if (!isParent) return;
     const since = new Date(Date.now() - 48 * 3600e3).toISOString();
-    const [st, rd, done, bed, fs, ft, hs, sb, sd] = await Promise.all([
+    const [st, rd, done, bed, fs, ft, hs, sb, sd, cn] = await Promise.all([
       supabase.from("care_settings").select("*").eq("family_id", family.id).maybeSingle(),
       supabase
         .from("care_rounds")
@@ -126,6 +142,11 @@ export default function CareTab() {
         .eq("family_id", family.id)
         .in("week_key", [isoWeekKey(dayKey(new Date())), isoWeekKey(dayKey(new Date(Date.now() - 7 * 86400e3)))]),
       supabase.from("shift_defaults").select("day_name, block_name, assignee").eq("family_id", family.id),
+      supabase
+        .from("care_notes")
+        .select("*, author:profiles!care_notes_author_id_fkey(display_name), resolver:profiles!care_notes_resolved_by_fkey(display_name)")
+        .eq("family_id", family.id)
+        .order("at", { ascending: false }),
     ]);
     if (rd.error && /care_rounds/.test(rd.error.message)) {
       setErr("Cares need the latest database migration (034) — run it and this page comes alive.");
@@ -149,6 +170,7 @@ export default function CareTab() {
     setFeedTicks((ft.data as unknown as FeedTick[]) ?? []);
     const all = (hs.data as unknown as CareRound[]) ?? [];
     setHist(all);
+    setNotes((cn.data as unknown as CareNote[]) ?? []);
     // who's on when — strict block hours, this week's rota, else the usual pattern
     const hrs = st.data as Record<string, string | null> | null;
     const h = (k: string, d: string) => (hrs?.[k] ? String(hrs[k]).slice(0, 5) : d);
@@ -195,6 +217,7 @@ export default function CareTab() {
   useRealtime(supabase, "care_settings", family.id, load);
   useRealtime(supabase, "feed_ticks", family.id, load);
   useRealtime(supabase, "shift_blocks", family.id, load);
+  useRealtime(supabase, "care_notes", family.id, load);
   useEffect(() => {
     const t = setInterval(() => setClock((c) => c + 1), 60_000);
     return () => clearInterval(t);
@@ -273,11 +296,23 @@ export default function CareTab() {
     feedTicks.filter((x) => dayKey(new Date(x.due_at)) === k).reduce((a, x) => a + feedTickPoints(x), 0);
   const roundPointsOn = (k: string) =>
     hist.filter((r) => dayKey(new Date(r.completed_at!)) === k).reduce((a, r) => a + (scoreOf.get(r.id)?.points ?? 0), 0);
-  const pointsToday = feedPointsOn(todayK) + roundPointsOn(todayK);
+  const notesByDay = new Map<string, number>();
+  for (const n of notes) {
+    const k = dayKey(new Date(n.at));
+    notesByDay.set(k, (notesByDay.get(k) ?? 0) + 1);
+  }
+  const notePointsOn = (k: string) => Math.min(notesByDay.get(k) ?? 0, NOTE_POINTS_CAP_PER_DAY) * NOTE_POINTS;
+  const pointsToday = feedPointsOn(todayK) + roundPointsOn(todayK) + notePointsOn(todayK);
   const lifetimePoints =
-    feedTicks.reduce((a, x) => a + feedTickPoints(x), 0) + hist.reduce((a, r) => a + (scoreOf.get(r.id)?.points ?? 0), 0);
+    feedTicks.reduce((a, x) => a + feedTickPoints(x), 0) +
+    hist.reduce((a, r) => a + (scoreOf.get(r.id)?.points ?? 0), 0) +
+    [...notesByDay.keys()].reduce((a, k) => a + notePointsOn(k), 0);
   const level = levelFor(lifetimePoints, first);
-  const badges = computeBadges({ rounds: hist, stepsFor, ticks: feedTicks, feedPlan, feedStreak: streak, now, cov });
+  const badges = computeBadges({
+    rounds: hist, stepsFor, ticks: feedTicks, feedPlan, feedStreak: streak, now, cov,
+    notes: notes.length,
+    handovers: notes.filter((n) => n.flag && n.resolved_at).length,
+  });
   const earnedCount = badges.filter((b) => b.earned).length;
   // today's team — who did what
   const tally: Record<string, { feeds: number; rounds: number }> = {};
@@ -307,11 +342,27 @@ export default function CareTab() {
       tracked: slots.length > 0 && +slots[slots.length - 1] >= firstTickMs,
       rounds: hist.filter((r) => dayKey(new Date(r.completed_at!)) === k).length,
       expected: Math.round(coveredMinutes(cov, d) / settings.round_interval_min),
-      points: feedPointsOn(k) + roundPointsOn(k),
+      points: feedPointsOn(k) + roundPointsOn(k) + notePointsOn(k),
       isToday: k === todayK,
     };
   });
   const bestDay = Math.max(0, ...week.filter((w) => !w.isToday).map((w) => w.points));
+  const openFlags = notes.filter((n) => n.flag && !n.resolved_at);
+  const weekAgoMs = +now - 7 * 86400e3;
+  const recentNotes = notes.filter((n) => +new Date(n.at) >= weekAgoMs && !(n.flag && !n.resolved_at));
+  const notesByDayList: [string, CareNote[]][] = [];
+  for (const n of recentNotes) {
+    const k = dayKey(new Date(n.at));
+    const last = notesByDayList[notesByDayList.length - 1];
+    if (last && last[0] === k) last[1].push(n);
+    else notesByDayList.push([k, [n]]);
+  }
+  const noteDayLabel = (k: string) => {
+    const d = new Date(k + "T12:00:00");
+    const diff = Math.round((+new Date(todayK + "T12:00:00") - +d) / 86400e3);
+    return diff === 0 ? "Today" : diff === 1 ? "Yesterday" : `${DOW[d.getDay()]} ${d.getDate()}`;
+  };
+  const phVal = nPh.trim() ? parseFloat(nPh.replace(",", ".")) : null;
   const say = (msg: string) => {
     setToast(msg);
     window.setTimeout(() => setToast((cur) => (cur === msg ? null : cur)), 7000);
@@ -445,6 +496,49 @@ export default function CareTab() {
       updated_at: new Date().toISOString(),
     });
     if (error) setErr("Plan didn't save: " + error.message);
+    load();
+  }
+
+  async function addNote(e: React.FormEvent) {
+    e.preventDefault();
+    setErr("");
+    if (phVal != null && (isNaN(phVal) || phVal < 0 || phVal > 14)) {
+      setErr("pH should be a number between 0 and 14.");
+      return;
+    }
+    if (nNappy == null && phVal == null && nWell == null && nSick == null && !nBody.trim()) return;
+    const { error } = await supabase.from("care_notes").insert({
+      family_id: family.id,
+      author_id: profile.id,
+      round_id: open?.id ?? null,
+      feed_due_at: feedNow ? feedNow.current.toISOString() : null,
+      nappy: nNappy,
+      ph: phVal,
+      went_well: nWell,
+      sick: nSick,
+      body: nBody.trim() || null,
+      flag: nFlag,
+    });
+    if (error) {
+      setErr(/care_notes/.test(error.message) ? "Notes need database migration 038." : error.message);
+      return;
+    }
+    say(nFlag ? `Flagged for the team ⚑ · +${NOTE_POINTS} pts` : `Noted · +${NOTE_POINTS} pts`);
+    setNNappy(null);
+    setNPh("");
+    setNWell(null);
+    setNSick(null);
+    setNBody("");
+    setNFlag(false);
+    load();
+  }
+  async function resolveNote(n: CareNote) {
+    await supabase.from("care_notes").update({ resolved_at: new Date().toISOString(), resolved_by: profile.id }).eq("id", n.id);
+    load();
+  }
+  async function deleteNote(n: CareNote) {
+    if (!window.confirm("Delete this note?")) return;
+    await supabase.from("care_notes").delete().eq("id", n.id);
     load();
   }
 
@@ -826,7 +920,7 @@ export default function CareTab() {
           </div>
         )}
         <p className="muted" style={{ marginTop: 8 }}>
-          Feeds {POINTS.feedOnTime} on time / {POINTS.feedLate} late · rounds {POINTS.round}, +{POINTS.roundOnTime} within the hour, +{POINTS.fullRound} full house, +{POINTS.bedding} fresh bedding, +{POINTS.photo} a photo. On time = {FEED_ON_TIME_MIN} min for feeds, {CARE_ON_TIME_MIN} for rounds. Outside your shifts the nurses have her — nothing then is held against you.
+          Feeds {POINTS.feedOnTime} on time / {POINTS.feedLate} late · rounds {POINTS.round}, +{POINTS.roundOnTime} within the hour, +{POINTS.fullRound} full house, +{POINTS.bedding} fresh bedding, +{POINTS.photo} a photo, +{NOTE_POINTS} a note (up to {NOTE_POINTS_CAP_PER_DAY} a day). On time = {FEED_ON_TIME_MIN} min for feeds, {CARE_ON_TIME_MIN} for rounds. Outside your shifts the nurses have her — nothing then is held against you.
         </p>
       </div>
 
@@ -926,6 +1020,117 @@ export default function CareTab() {
               </div>
             );
           })
+        )}
+      </div>
+
+      {/* notes for the team */}
+      <div className="card">
+        <h2>Notes for the team</h2>
+        <p className="note">
+          What was in the nappy, the aspirate pH, how the feed went down, any sick — and anything the nurses or doctors should hear. Flag it and it stays pinned here until it&apos;s been said.
+        </p>
+        <form className="notecomposer" onSubmit={addNote}>
+          <label>Nappy</label>
+          <div className="careopts" style={{ marginTop: 4 }}>
+            {NAPPY_OPTS.map((o) => (
+              <button key={o.value} type="button" className={`careopt ${nNappy === o.value ? "on" : ""}`} onClick={() => setNNappy(nNappy === o.value ? null : o.value)}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <div className="row rowwrap" style={{ marginTop: 8, alignItems: "flex-end" }}>
+            <div style={{ flex: "0 0 110px" }}>
+              <label htmlFor="cn-ph">Aspirate pH</label>
+              <input id="cn-ph" type="text" inputMode="decimal" value={nPh} onChange={(e) => setNPh(e.target.value)} placeholder="5.0" />
+            </div>
+            <div>
+              <label>Feed</label>
+              <div className="careopts" style={{ marginTop: 4 }}>
+                <button type="button" className={`careopt ${nWell === true ? "on" : ""}`} onClick={() => setNWell(nWell === true ? null : true)}>
+                  🍼 Went down well
+                </button>
+                <button type="button" className={`careopt ${nWell === false ? "on" : ""}`} onClick={() => setNWell(nWell === false ? null : false)}>
+                  Not great
+                </button>
+              </div>
+            </div>
+          </div>
+          {phVal != null && !isNaN(phVal) && (
+            <p className={`muted ${phVal > PH_OK_MAX ? "tempflag high" : ""}`} style={{ marginTop: 4 }}>
+              {phVal > PH_OK_MAX ? `pH above ${PH_OK_MAX} — check with the nurse before the feed` : `pH ${PH_OK_MAX} or under — tube position confirmed`}
+            </p>
+          )}
+          <label>Sick</label>
+          <div className="careopts" style={{ marginTop: 4 }}>
+            {SICK_OPTS.map((o) => (
+              <button key={o.value} type="button" className={`careopt ${nSick === o.value ? "on" : ""}`} onClick={() => setNSick(nSick === o.value ? null : o.value)}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <label htmlFor="cn-body">Anything else</label>
+          <input id="cn-body" type="text" value={nBody} onChange={(e) => setNBody(e.target.value)} placeholder="e.g. red patch behind left ear, seemed unsettled after" />
+          <label className="flagtoggle">
+            <input type="checkbox" checked={nFlag} onChange={(e) => setNFlag(e.target.checked)} />
+            ⚑ Tell the nurse / doctor
+          </label>
+          <div className="row" style={{ marginTop: 10 }}>
+            <button className="primary" type="submit">
+              Add note
+            </button>
+          </div>
+        </form>
+
+        {openFlags.length > 0 && (
+          <>
+            <div className="noteday">To tell the team</div>
+            {openFlags.map((n) => (
+              <div key={n.id} className="note flagged">
+                <span className="t">{fmtHM(new Date(n.at))}</span>
+                <span>
+                  {noteGist(n) && <div className="gist">{noteGist(n)}</div>}
+                  {n.body && <div className="body">{n.body}</div>}
+                  <div className="who">
+                    {n.author?.display_name ?? "—"} · {noteDayLabel(dayKey(new Date(n.at))).toLowerCase()}
+                  </div>
+                </span>
+                <button type="button" className="ghost" onClick={() => resolveNote(n)}>
+                  Told them ✓
+                </button>
+              </div>
+            ))}
+          </>
+        )}
+
+        {notesByDayList.length === 0 && openFlags.length === 0 ? (
+          <div className="empty" style={{ marginTop: 10 }}>Notes collect here, newest first.</div>
+        ) : (
+          notesByDayList.map(([k, list]) => (
+            <div key={k}>
+              <div className="noteday">{noteDayLabel(k)}</div>
+              <div className="notes">
+                {list.map((n) => (
+                  <div key={n.id} className="note">
+                    <span className="t">{fmtHM(new Date(n.at))}</span>
+                    <span>
+                      {noteGist(n) && <div className="gist">{noteGist(n)}</div>}
+                      {n.body && <div className="body">{n.body}</div>}
+                      <div className="who">
+                        {n.author?.display_name ?? "—"}
+                        {n.flag && n.resolved_at ? ` · ⚑ told${n.resolver ? ` by ${n.resolver.display_name}` : ""}` : ""}
+                      </div>
+                    </span>
+                    <button type="button" className="tiny" onClick={() => deleteNote(n)} aria-label="Delete note">
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+        {notes.length > recentNotes.length + openFlags.length && (
+          <p className="muted" style={{ marginTop: 8 }}>Showing the last 7 days · {notes.length} notes all time.</p>
         )}
       </div>
 

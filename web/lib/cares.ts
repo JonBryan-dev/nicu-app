@@ -271,6 +271,8 @@ export interface BadgeInput {
   feedStreak: number;
   now: Date;
   cov?: Coverage;
+  notes?: number; // notes written, all time
+  handovers?: number; // flags marked told, all time
 }
 export function computeBadges(inp: BadgeInput): Badge[] {
   const done = inp.rounds.filter((r) => r.completed_at);
@@ -323,6 +325,8 @@ export function computeBadges(inp: BadgeInput): Badge[] {
     { key: "roll", emoji: "🔥", name: "On a roll", how: "A full day of feeds on time in a row", earned: inp.feedPlan ? inp.feedStreak >= Math.round(1440 / inp.feedPlan.every) : false },
     { key: "snap", emoji: "📷", name: "Snapper", how: "Ten photos on rounds", earned: photos >= 10 },
     { key: "century", emoji: "💯", name: "Century", how: "One hundred rounds finished", earned: done.length >= 100 },
+    { key: "eyes", emoji: "👀", name: "Sharp eyes", how: "Twenty-five notes for the team", earned: (inp.notes ?? 0) >= 25 },
+    { key: "handover", emoji: "🗣", name: "Handover", how: "Ten flags told to the team", earned: (inp.handovers ?? 0) >= 10 },
   ];
   return list;
 }
@@ -390,4 +394,52 @@ export function roundDue(prev: CareRound | null, intervalMin: number, cov?: Cove
   if (!prev?.completed_at) return null;
   const due = new Date(+new Date(prev.completed_at) + intervalMin * 60000);
   return cov && !parentOnAt(cov, due) ? nextParentOn(cov, due) : due;
+}
+
+// ---- notes for the team ----
+export type Nappy = "wet" | "dirty" | "both" | "dry";
+export type Sick = "none" | "posset" | "small" | "large";
+export interface CareNote {
+  id: string;
+  family_id: string;
+  author_id: string | null;
+  at: string;
+  round_id: string | null;
+  feed_due_at: string | null;
+  nappy: Nappy | null;
+  ph: number | null;
+  went_well: boolean | null;
+  sick: Sick | null;
+  body: string | null;
+  flag: boolean;
+  resolved_at: string | null;
+  resolved_by: string | null;
+  author?: { display_name: string } | null;
+  resolver?: { display_name: string } | null;
+}
+export const NAPPY_OPTS: { value: Nappy; label: string }[] = [
+  { value: "wet", label: "💧 Wet" },
+  { value: "dirty", label: "💩 Dirty" },
+  { value: "both", label: "💧💩 Both" },
+  { value: "dry", label: "Dry" },
+];
+export const SICK_OPTS: { value: Sick; label: string }[] = [
+  { value: "none", label: "No sick" },
+  { value: "posset", label: "Posset" },
+  { value: "small", label: "Small sick" },
+  { value: "large", label: "Big sick" },
+];
+// NG aspirate: pH 5.5 or under confirms the tube's in the stomach (NHS guidance)
+export const PH_OK_MAX = 5.5;
+export const NOTE_POINTS = 3;
+export const NOTE_POINTS_CAP_PER_DAY = 5; // notes that count, per day — no farming
+
+/** One-line gist of a note's quick fields. */
+export function noteGist(n: CareNote): string {
+  const bits: string[] = [];
+  if (n.nappy) bits.push(NAPPY_OPTS.find((o) => o.value === n.nappy)?.label ?? n.nappy);
+  if (n.ph != null) bits.push(`pH ${n.ph}${n.ph > PH_OK_MAX ? " ⚠" : ""}`);
+  if (n.went_well != null) bits.push(n.went_well ? "🍼 went down well" : "🍼 not great");
+  if (n.sick && n.sick !== "none") bits.push(`🤢 ${SICK_OPTS.find((o) => o.value === n.sick)?.label.toLowerCase() ?? n.sick}`);
+  return bits.join(" · ");
 }
