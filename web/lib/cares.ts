@@ -121,6 +121,7 @@ export function hoursAgo(iso: string | null, now: Date = new Date()): string {
 }
 
 // ---- feeds: the ward's fixed grid, ticked one at a time ----
+export type FeedMethod = "ng" | "bottle" | "breast" | "mixed";
 export interface FeedTick {
   id: string;
   family_id: string;
@@ -128,8 +129,12 @@ export interface FeedTick {
   done_at: string;
   done_by: string | null;
   ml: number | null;
+  method?: FeedMethod | null; // how it went in (migration 040); null = NG
+  oral_ml?: number | null; // how much by mouth
   doer?: { display_name: string } | null;
 }
+export const isOral = (t: FeedTick) => t.method === "bottle" || t.method === "breast" || t.method === "mixed";
+export const ORAL_BONUS = 5; // a feed by mouth is the whole point right now
 export const FEED_ON_TIME_MIN = 20;
 
 /** Every feed slot that falls inside one calendar day (local time). */
@@ -198,7 +203,8 @@ export const POINTS = {
 export const dayKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-export const feedTickPoints = (t: FeedTick) => (feedOnTime(t) ? POINTS.feedOnTime : POINTS.feedLate);
+export const feedTickPoints = (t: FeedTick) =>
+  (feedOnTime(t) ? POINTS.feedOnTime : POINTS.feedLate) + (isOral(t) ? ORAL_BONUS : 0);
 
 /** Was this round finished within the hour of when it was due (one interval
  *  after the previous finished round)? The first round ever is on time. */
@@ -442,4 +448,36 @@ export function noteGist(n: CareNote): string {
   if (n.went_well != null) bits.push(n.went_well ? "🍼 went down well" : "🍼 not great");
   if (n.sick && n.sick !== "none") bits.push(`🤢 ${SICK_OPTS.find((o) => o.value === n.sick)?.label.toLowerCase() ?? n.sick}`);
   return bits.join(" · ");
+}
+
+
+// ---- bottle feeding: the usual climb, every step SALT's call ----
+// Fractions of a full feed × times a day. Shown as "the next step to agree
+// with SALT", never as an instruction — she sets the pace with her cues.
+export const BOTTLE_LADDER: { frac: number; perDay: number; note: string }[] = [
+  { frac: 0.15, perDay: 1, note: "a taste, once a day" },
+  { frac: 0.15, perDay: 2, note: "twice a day" },
+  { frac: 0.3, perDay: 2, note: "a bit more, twice a day" },
+  { frac: 0.3, perDay: 4, note: "four times a day" },
+  { frac: 0.5, perDay: 4, note: "half feeds, four a day" },
+  { frac: 1, perDay: 2, note: "two full bottles a day" },
+  { frac: 1, perDay: 4, note: "four full bottles a day" },
+  { frac: 1, perDay: 6, note: "six full bottles a day" },
+  { frac: 1, perDay: 99, note: "every feed by mouth" },
+];
+const round5 = (ml: number) => Math.max(1, Math.round(ml / 5) * 5);
+/** The first rung above the current target, in ml for this baby. */
+export function nextBottleStep(
+  bottleMl: number,
+  perDay: number,
+  fullMl: number | null,
+  slotsPerDay: number
+): { ml: number; perDay: number; note: string } | null {
+  const full = fullMl ?? bottleMl * 4;
+  for (const r of BOTTLE_LADDER) {
+    const ml = r.frac >= 1 ? Math.round(full) : round5(full * r.frac);
+    const n = Math.min(r.perDay, slotsPerDay);
+    if (ml > bottleMl || (ml >= bottleMl && n > perDay)) return { ml, perDay: n, note: r.note };
+  }
+  return null;
 }

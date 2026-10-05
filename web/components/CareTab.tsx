@@ -50,6 +50,10 @@ import {
   type CareNote,
   type Nappy,
   type Sick,
+  isOral,
+  ORAL_BONUS,
+  nextBottleStep,
+  type FeedMethod,
   type CareRound,
   type CareTick,
   type CareSettings,
@@ -69,7 +73,12 @@ export default function CareTab() {
   const [lastBedding, setLastBedding] = useState<CareRound | null>(null);
   const [ticks, setTicks] = useState<CareTick[]>([]);
   const [urls, setUrls] = useState<Record<string, string>>({});
-  const [feedPlan, setFeedPlan] = useState<{ first: string; every: number; ml: number | null } | null>(null);
+  const [feedPlan, setFeedPlan] = useState<{ first: string; every: number; ml: number | null; bottleMl: number | null; bottlePerDay: number | null } | null>(null);
+  const [feedMethod, setFeedMethod] = useState<FeedMethod>("ng");
+  const [oralMl, setOralMl] = useState("");
+  const [bottleEdit, setBottleEdit] = useState(false);
+  const [bMl, setBMl] = useState("");
+  const [bPerDay, setBPerDay] = useState("");
   const [feedTicks, setFeedTicks] = useState<FeedTick[]>([]);
   const [hist, setHist] = useState<CareRound[]>([]); // every finished round, oldest first
   const [stepCounts, setStepCounts] = useState<Record<string, number>>({});
@@ -124,7 +133,7 @@ export default function CareTab() {
         .order("completed_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      supabase.from("feed_settings").select("baby_first_feed, baby_interval_min, baby_ml").eq("family_id", family.id).maybeSingle(),
+      supabase.from("feed_settings").select("baby_first_feed, baby_interval_min, baby_ml, bottle_ml, bottle_per_day").eq("family_id", family.id).maybeSingle(),
       supabase
         .from("feed_ticks")
         .select("*, doer:profiles!feed_ticks_done_by_fkey(display_name)")
@@ -158,12 +167,14 @@ export default function CareTab() {
     setRounds(rs);
     setLastDone((done.data as unknown as CareRound) ?? null);
     setLastBedding((bed.data as unknown as CareRound) ?? null);
-    const plan = fs.data as { baby_first_feed: string | null; baby_interval_min: number | null; baby_ml: number | null } | null;
+    const plan = fs.data as { baby_first_feed: string | null; baby_interval_min: number | null; baby_ml: number | null; bottle_ml?: number | null; bottle_per_day?: number | null } | null;
     setFeedPlan(
       plan?.baby_first_feed && plan.baby_interval_min
-        ? { first: plan.baby_first_feed.slice(0, 5), every: plan.baby_interval_min, ml: plan.baby_ml ?? null }
+        ? { first: plan.baby_first_feed.slice(0, 5), every: plan.baby_interval_min, ml: plan.baby_ml ?? null, bottleMl: plan.bottle_ml ?? null, bottlePerDay: plan.bottle_per_day ?? null }
         : null
     );
+    if (plan?.bottle_ml != null) { setBMl((c) => (c === "" ? String(plan.bottle_ml) : c)); }
+    if (plan?.bottle_per_day != null) { setBPerDay((c) => (c === "" ? String(plan.bottle_per_day) : c)); }
     if (plan?.baby_ml != null) setFeedMl((cur) => (cur === "" ? String(plan.baby_ml) : cur));
     if (plan?.baby_interval_min) setPlanEvery(plan.baby_interval_min);
     if (plan?.baby_ml != null) setPlanMl(String(plan.baby_ml));
@@ -282,6 +293,14 @@ export default function CareTab() {
   const onTimeToday = slotsMine.filter((s) => { const k = tickByDue.get(+s); return k && feedOnTime(k); }).length;
   const targetCovered = feedTarget ? onAt(feedTarget) : true;
   const mlToday = Math.round(slotsToday.reduce((a, s) => a + (tickByDue.get(+s)?.ml ?? 0), 0) * 10) / 10;
+  const oralTicksOn = (k: string) => feedTicks.filter((x) => isOral(x) && dayKey(new Date(x.due_at)) === k);
+  const oralMlOn = (k: string) => Math.round(oralTicksOn(k).reduce((a, x) => a + (x.oral_ml ?? 0), 0) * 10) / 10;
+  const oralToday = oralTicksOn(dayKey(now));
+  const anyOral = feedTicks.some(isOral);
+  const bottleTargetMlDay = feedPlan?.bottleMl && feedPlan.bottlePerDay ? feedPlan.bottleMl * feedPlan.bottlePerDay : null;
+  const bottleNext = feedPlan?.bottleMl && feedPlan.bottlePerDay
+    ? nextBottleStep(feedPlan.bottleMl, feedPlan.bottlePerDay, feedPlan.ml, Math.round(1440 / feedPlan.every))
+    : null;
   const streak = feedPlan ? feedStreak(feedPlan.first, feedPlan.every, feedTicks, now, cov) : 0;
   const roundsPerDay = Math.round(coveredMinutes(cov, now) / settings.round_interval_min);
   const roundsToday = completed.filter((r) => new Date(r.completed_at!).toDateString() === todayKey).length;
@@ -469,13 +488,27 @@ export default function CareTab() {
         due_at: slot.toISOString(),
         done_by: profile.id,
         ml: feedMl.trim() ? parseFloat(feedMl.replace(",", ".")) : (feedPlan?.ml ?? null),
+        method: feedMethod,
+        oral_ml:
+          feedMethod === "ng"
+            ? null
+            : oralMl.trim()
+              ? parseFloat(oralMl.replace(",", "."))
+              : (feedPlan?.bottleMl ?? null),
       },
       { onConflict: "family_id,due_at" }
     );
     if (error) setErr(/feed_ticks/.test(error.message) ? "Feed ticks need database migration 035." : error.message);
     else {
       const late = +new Date() - +slot > FEED_ON_TIME_MIN * 60000;
-      say(late ? `${fmtHM(slot)} feed ticked · +${POINTS.feedLate} pts` : `${fmtHM(slot)} feed on time · +${POINTS.feedOnTime} pts ✓`);
+      const base = late ? POINTS.feedLate : POINTS.feedOnTime;
+      say(
+        feedMethod === "ng"
+          ? `${fmtHM(slot)} feed ${late ? "ticked" : "on time ✓"} · +${base} pts`
+          : `${fmtHM(slot)} feed by mouth 🍼 · +${base + ORAL_BONUS} pts`
+      );
+      setFeedMethod("ng");
+      setOralMl("");
     }
     load();
   }
@@ -539,6 +572,22 @@ export default function CareTab() {
   async function deleteNote(n: CareNote) {
     if (!window.confirm("Delete this note?")) return;
     await supabase.from("care_notes").delete().eq("id", n.id);
+    load();
+  }
+
+  async function saveBottleTarget(e: React.FormEvent) {
+    e.preventDefault();
+    setErr("");
+    const ml = bMl.trim() ? parseFloat(bMl.replace(",", ".")) : null;
+    const per = bPerDay.trim() ? parseInt(bPerDay, 10) : null;
+    const { error } = await supabase.from("feed_settings").upsert({
+      family_id: family.id,
+      bottle_ml: ml,
+      bottle_per_day: per,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) setErr("Bottle target didn't save: " + error.message);
+    setBottleEdit(false);
     load();
   }
 
@@ -836,6 +885,24 @@ export default function CareTab() {
               />
             </div>
           </div>
+          <div className="careopts" style={{ marginTop: 8 }}>
+            {(["ng", "bottle", "breast"] as FeedMethod[]).map((m) => (
+              <button key={m} type="button" className={`careopt ${feedMethod === m ? "on" : ""}`} onClick={() => setFeedMethod(m)}>
+                {m === "ng" ? "NG tube" : m === "bottle" ? "🍼 Bottle" : "🤱 Breast"}
+              </button>
+            ))}
+            {feedMethod !== "ng" && (
+              <input
+                type="text"
+                inputMode="decimal"
+                value={oralMl}
+                onChange={(e) => setOralMl(e.target.value)}
+                placeholder={feedPlan.bottleMl ? `${feedPlan.bottleMl} ml by mouth` : "ml by mouth"}
+                aria-label="Millilitres taken by mouth"
+                style={{ width: 150 }}
+              />
+            )}
+          </div>
           <div className="dots" aria-label="Today's feeds">
             {slotsToday.map((s) => {
               const st = dotState(s);
@@ -845,7 +912,7 @@ export default function CareTab() {
                 <button
                   key={+s}
                   type="button"
-                  className={`dot ${st}`}
+                  className={`dot ${st} ${tk && isOral(tk) ? "oral" : ""}`}
                   disabled={future}
                   title={`${fmtHM(s)} — ${st === "done" ? "on time" : st === "late" ? "ticked late" : st === "missed" ? "not ticked" : st === "now" ? "due now" : st === "nurses" ? "nurses' feed" : "later"}`}
                   aria-label={`${fmtHM(s)} feed, ${st}`}
@@ -861,6 +928,64 @@ export default function CareTab() {
             </span>
             <span>dashed = nurses&apos; time</span>
           </div>
+        </div>
+      )}
+
+      {/* bottle feeding — the climb, one taste at a time */}
+      {feedPlan && (feedPlan.bottleMl || anyOral) && (
+        <div className="card">
+          <h2>Bottle feeding</h2>
+          {!bottleEdit ? (
+            <p className="note">
+              {feedPlan.bottleMl && feedPlan.bottlePerDay
+                ? `SALT's target: ${feedPlan.bottleMl} ml by bottle, ${feedPlan.bottlePerDay} time${feedPlan.bottlePerDay === 1 ? "" : "s"} a day — the rest of each feed down the NG.`
+                : "No bottle target set yet."}{" "}
+              <button type="button" className="tiny" onClick={() => setBottleEdit(true)}>change</button>
+            </p>
+          ) : (
+            <form className="row rowwrap" style={{ alignItems: "flex-end" }} onSubmit={saveBottleTarget}>
+              <div>
+                <label htmlFor="bt-ml">ml per bottle</label>
+                <input id="bt-ml" type="text" inputMode="decimal" value={bMl} onChange={(e) => setBMl(e.target.value)} placeholder="5" />
+              </div>
+              <div>
+                <label htmlFor="bt-n">times a day</label>
+                <input id="bt-n" type="text" inputMode="numeric" value={bPerDay} onChange={(e) => setBPerDay(e.target.value)} placeholder="2" />
+              </div>
+              <button className="ghost" type="submit">Save</button>
+            </form>
+          )}
+          <div className="dotlabel">
+            <span>Today by mouth</span>
+            <span>
+              <b>{oralToday.length}</b>{feedPlan.bottlePerDay ? ` / ${feedPlan.bottlePerDay}` : ""} feeds · <b>{oralMlOn(dayKey(now))}</b>{bottleTargetMlDay ? ` / ${bottleTargetMlDay}` : ""} ml
+            </span>
+          </div>
+          {feedPlan.bottlePerDay ? (
+            <div className="dots">
+              {Array.from({ length: Math.max(feedPlan.bottlePerDay, oralToday.length) }, (_, i) => (
+                <span key={i} className={`dot ${i < oralToday.length ? "done oral" : "todo"}`} style={{ width: 16, height: 16, cursor: "default" }} />
+              ))}
+            </div>
+          ) : null}
+          <div className="bars" aria-label="ml by mouth, last 7 days">
+            {week.map((w) => {
+              const v = oralMlOn(w.key);
+              const max = Math.max(1, ...week.map((x) => oralMlOn(x.key)), bottleTargetMlDay ?? 0);
+              return <div key={w.key} className={`bar ${w.isToday ? "today" : ""}`} style={{ height: `${Math.round((v / max) * 100)}%` }} title={`${w.label}: ${v} ml`} />;
+            })}
+          </div>
+          <div className="barlabels">
+            {week.map((w) => (
+              <span key={w.key}>{w.isToday ? "today" : w.label.split(" ")[0]}</span>
+            ))}
+          </div>
+          {bottleNext && (
+            <p className="muted" style={{ marginTop: 8 }}>
+              Next step on the usual path — <b>{bottleNext.ml} ml × {bottleNext.perDay === 99 ? "every feed" : `${bottleNext.perDay} a day`}</b> ({bottleNext.note}). Every step is SALT&apos;s call on her cues: stamina, suck-swallow-breathe, no dips. Ask them when she seems ready.
+            </p>
+          )}
+          <p className="muted" style={{ marginTop: 6 }}>+{ORAL_BONUS} pts for every feed she takes by mouth.</p>
         </div>
       )}
 
@@ -920,7 +1045,7 @@ export default function CareTab() {
           </div>
         )}
         <p className="muted" style={{ marginTop: 8 }}>
-          Feeds {POINTS.feedOnTime} on time / {POINTS.feedLate} late · rounds {POINTS.round}, +{POINTS.roundOnTime} within the hour, +{POINTS.fullRound} full house, +{POINTS.bedding} fresh bedding, +{POINTS.photo} a photo, +{NOTE_POINTS} a note (up to {NOTE_POINTS_CAP_PER_DAY} a day). On time = {FEED_ON_TIME_MIN} min for feeds, {CARE_ON_TIME_MIN} for rounds. Outside your shifts the nurses have her — nothing then is held against you.
+          Feeds {POINTS.feedOnTime} on time / {POINTS.feedLate} late · rounds {POINTS.round}, +{POINTS.roundOnTime} within the hour, +{POINTS.fullRound} full house, +{POINTS.bedding} fresh bedding, +{POINTS.photo} a photo, +{NOTE_POINTS} a note (up to {NOTE_POINTS_CAP_PER_DAY} a day), +{ORAL_BONUS} a feed by mouth. On time = {FEED_ON_TIME_MIN} min for feeds, {CARE_ON_TIME_MIN} for rounds. Outside your shifts the nurses have her — nothing then is held against you.
         </p>
       </div>
 

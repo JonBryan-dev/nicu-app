@@ -1821,3 +1821,23 @@ select {
   cursor: pointer;
 }
 .flagtoggle input { width: 20px; height: 20px; accent-color: var(--rose-deep); }
+/* feeds by mouth */
+.dot.oral { box-shadow: 0 0 0 2px var(--sky); }
+.weanstage {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px dotted var(--mist);
+  font-size: 0.88rem;
+  align-items: baseline;
+}
+.weanstage:last-child { border-bottom: none; }
+.weanstage.now { font-weight: 700; color: var(--rose-deep); }
+.weanstage.past { opacity: 0.55; }
+.weanstage .n { font-family: var(--font-fraunces), Georgia, serif; font-size: 1.05rem; }
+.bars { display: flex; align-items: flex-end; gap: 5px; height: 56px; margin: 8px 0 2px; }
+.bar { flex: 1; background: var(--sky); border-radius: 4px 4px 0 0; min-height: 2px; opacity: 0.85; }
+.bar.today { background: var(--rose-deep); opacity: 1; }
+.barlabels { display: flex; gap: 5px; font-size: 0.68rem; color: var(--ink-soft); }
+.barlabels span { flex: 1; text-align: center; }
