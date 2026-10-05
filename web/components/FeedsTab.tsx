@@ -17,7 +17,8 @@ import {
   type SleepWindowRow,
   type SlotRow,
 } from "@/lib/feedSchedule";
-import { todayKey, dayNumber } from "@/lib/dates";
+import { todayKey, dayNumber, fmtDate } from "@/lib/dates";
+import { weanPlan, suggestedStopDate, weanKey, MIN_DAYS_PER_DROP } from "@/lib/weaning";
 import { PowerPumpButton } from "@/components/PowerPumpProvider";
 import PumpHistory from "@/components/PumpHistory";
 import PumpDays from "@/components/PumpDays";
@@ -150,11 +151,24 @@ export default function FeedsTab() {
     return () => clearInterval(t);
   }, [openFeed]);
 
-  const schedule = useMemo(
-    () => computeSchedule(settings, feeds, windows, slots, new Date(), { pumping: true }),
-    [settings, feeds, windows, slots]
+  // weaning: today's count comes from the step-down; overnight pumps go first
+  // (a 24h "night gap" plans nothing after night_from), the rest spread by day
+  const wean = useMemo(
+    () =>
+      settings.weaning && settings.wean_target && settings.wean_started
+        ? weanPlan(settings.wean_start_count ?? settings.feeds_per_day ?? 8, settings.wean_started, settings.wean_target)
+        : null,
+    [settings.weaning, settings.wean_target, settings.wean_started, settings.wean_start_count, settings.feeds_per_day]
   );
-  const gaps = useMemo(() => computeGaps(settings), [settings]);
+  const planSettings = useMemo(
+    () => (wean && wean.todayCount > 0 ? { ...settings, feeds_per_day: wean.todayCount, interval_night_min: 24 * 60 } : settings),
+    [settings, wean]
+  );
+  const schedule = useMemo(() => {
+    const s = computeSchedule(planSettings, feeds, windows, slots, new Date(), { pumping: true });
+    return wean && wean.todayCount === 0 ? s.filter((x) => x.logged) : s;
+  }, [planSettings, feeds, windows, slots, wean]);
+  const gaps = useMemo(() => computeGaps(planSettings), [planSettings]);
   const babyTimes = useMemo(() => babyFeedTimes(settings, slots), [settings, slots]);
 
   const pumpedToday = feeds.reduce((a, f) => a + (f.ml ?? 0), 0);
@@ -166,6 +180,7 @@ export default function FeedsTab() {
   // 750 by day 14) and the CHOP consensus band of 750–1000 ml/day by day 14 —
   // deliberately above a preemie's intake, because demand jumps later.
   const coach = (() => {
+    if (settings.weaning) return null; // volume targets don't apply any more
     const todayStr = dayKey;
     const completeDays = Object.entries(historyTotals)
       .filter(([d, ml]) => d !== todayStr && ml > 0)
@@ -352,6 +367,16 @@ export default function FeedsTab() {
       .then(() => {}); // history is best-effort
   }
 
+  async function startWeaning() {
+    const count = settings.feeds_per_day ?? 8;
+    await saveSettings({
+      weaning: true,
+      wean_started: todayKey(),
+      wean_start_count: count,
+      wean_target: weanKey(suggestedStopDate(count)),
+    });
+  }
+
   async function addWindow(
     person: "mum" | "dad",
     kind: "sleep" | "meal",
@@ -395,7 +420,7 @@ export default function FeedsTab() {
           </p>
         ) : (
           <p style={{ fontWeight: 600 }}>
-            🍼 every {Math.round((settings.baby_interval_min / 60) * 10) / 10}h · {settings.baby_ml ?? "?"} ml each ·{" "}
+            🍼 every {Math.round((settings.baby_interval_min / 60) * 10) / 10}h{settings.baby_first_feed ? ` from ${settings.baby_first_feed.slice(0, 5)}` : ""} · {settings.baby_ml ?? "?"} ml each{settings.bottle_ml ? ` · bottle ${settings.bottle_ml} ml × ${settings.bottle_per_day ?? 1}/day` : ""} ·{" "}
             {babyFeedsPerDay(settings)} feeds ≈ <b>{babyNeedsPerDay || "?"} ml/day</b>
           </p>
         )}
@@ -503,7 +528,11 @@ export default function FeedsTab() {
       <div className="card">
         <h2>Your pumping today</h2>
         <p className="muted" style={{ marginBottom: 6 }}>
-          Day gaps ≈ {Math.round(gaps.dayGap / 6) / 10}h · overnight {Math.round(gaps.nightGap / 6) / 10}h
+          {wean
+            ? wean.done
+              ? "Weaning done — nothing planned. Pump to comfort only if you need to."
+              : `Weaning · ${wean.todayCount} today${wean.nextDrop ? ` · one fewer from ${fmtDate(weanKey(wean.nextDrop))}` : ""} · gaps ≈ ${Math.round(gaps.dayGap / 6) / 10}h`
+            : `Day gaps ≈ ${Math.round(gaps.dayGap / 6) / 10}h · overnight ${Math.round(gaps.nightGap / 6) / 10}h`}
         </p>
         {schedule.length === 0 ? (
           <div className="empty">Start the first pump and today&apos;s plan appears here.</div>
@@ -568,6 +597,98 @@ export default function FeedsTab() {
             );
           })
         )}
+      </div>
+
+      {/* weaning off the pump */}
+      <div className="card">
+        <h2>Weaning off the pump</h2>
+        {!settings.weaning ? (
+          <>
+            <p className="note">
+              When you&apos;re ready to stop, switch this on and pick a date. You get a gentle step-down — one fewer pump every few days — and the plan above follows it day by day.
+            </p>
+            <button className="ghost" onClick={startWeaning}>
+              Start weaning
+            </button>
+          </>
+        ) : wean ? (
+          <>
+            <div className="row rowwrap">
+              <div>
+                <label htmlFor="wn-target">Stop by</label>
+                <input
+                  id="wn-target"
+                  type="date"
+                  value={settings.wean_target ?? ""}
+                  min={settings.wean_started ?? todayKey()}
+                  onChange={(e) => e.target.value && saveSettings({ wean_target: e.target.value })}
+                />
+              </div>
+              <div>
+                <label htmlFor="wn-start">Started</label>
+                <input
+                  id="wn-start"
+                  type="date"
+                  value={settings.wean_started ?? ""}
+                  max={todayKey()}
+                  onChange={(e) => e.target.value && saveSettings({ wean_started: e.target.value })}
+                />
+              </div>
+              <div>
+                <label htmlFor="wn-count">Pumps a day then</label>
+                <select id="wn-count" value={settings.wean_start_count ?? 8} onChange={(e) => saveSettings({ wean_start_count: +e.target.value })}>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {wean.tooFast && !wean.done && (
+              <p className="note" style={{ borderColor: "var(--rose)", marginTop: 10 }}>
+                That date means one fewer every {wean.daysPerDrop} days — faster than teams usually advise (every {MIN_DAYS_PER_DROP}+ is the usual floor). The gentlest date from today is{" "}
+                <b>{fmtDate(weanKey(suggestedStopDate(wean.todayCount)))}</b>.{" "}
+                <button type="button" className="tiny" onClick={() => saveSettings({ wean_target: weanKey(suggestedStopDate(wean.todayCount)) })}>
+                  use that
+                </button>
+              </p>
+            )}
+
+            {wean.done ? (
+              <p style={{ fontWeight: 700, marginTop: 10 }}>You&apos;ve stopped. That was a huge thing to do — well done. 💛</p>
+            ) : (
+              <p style={{ marginTop: 10 }}>
+                <b>{wean.todayCount}</b> pump{wean.todayCount === 1 ? "" : "s"} today
+                {wean.nextDrop ? ` · one fewer from ${fmtDate(weanKey(wean.nextDrop))}` : ""} · {wean.daysLeft} day{wean.daysLeft === 1 ? "" : "s"} to go · one fewer every {wean.daysPerDrop}
+              </p>
+            )}
+
+            <div style={{ marginTop: 8 }}>
+              {wean.stages.map((s, i) => (
+                <div key={i} className={`weanstage ${i === wean.stageIndex ? "now" : i < wean.stageIndex ? "past" : ""}`}>
+                  <span className="n">{s.count} a day</span>
+                  <span>
+                    {fmtDate(weanKey(s.from))} – {fmtDate(weanKey(new Date(+s.to - 86400e3)))}
+                  </span>
+                  <span className="muted">{s.days} day{s.days === 1 ? "" : "s"}</span>
+                </div>
+              ))}
+              <div className={`weanstage ${wean.done ? "now" : ""}`}>
+                <span className="n">stop</span>
+                <span>{fmtDate(settings.wean_target ?? todayKey())}</span>
+                <span />
+              </div>
+            </div>
+
+            <p className="muted" style={{ marginTop: 10 }}>
+              Drop the overnight pump first, then the middle-of-the-day ones; keep the first one of the morning until last. Pump to comfort, not to empty — shorter sessions are fine. A hot, hard, red patch or feeling flu-ish means ring the team, not push on.
+              This is a pace, not a prescription — agree it with the lactation team.
+            </p>
+            <button type="button" className="tiny" style={{ marginTop: 8 }} onClick={() => saveSettings({ weaning: false })}>
+              turn weaning off
+            </button>
+          </>
+        ) : null}
       </div>
 
       {/* supply vs demand */}
@@ -645,7 +766,33 @@ export default function FeedsTab() {
                 <label>ml per feed</label>
                 <input type="text" inputMode="decimal" defaultValue={settings.baby_ml ?? ""} onBlur={(e) => saveSettings({ baby_ml: e.target.value ? +e.target.value : null })} placeholder="40" />
               </div>
+              <div>
+                <label>First feed</label>
+                <input
+                  type="time"
+                  value={settings.baby_first_feed?.slice(0, 5) ?? ""}
+                  onChange={(e) => saveSettings({ baby_first_feed: e.target.value || null })}
+                  aria-label="Time of the first feed of the day"
+                />
+              </div>
             </div>
+            <div className="row rowwrap" style={{ marginTop: 10 }}>
+              <div>
+                <label>Bottle target (ml)</label>
+                <input type="text" inputMode="decimal" defaultValue={settings.bottle_ml ?? ""} onBlur={(e) => saveSettings({ bottle_ml: e.target.value ? +e.target.value : null })} placeholder="5" />
+              </div>
+              <div>
+                <label>Bottles a day</label>
+                <select value={settings.bottle_per_day ?? 0} onChange={(e) => saveSettings({ bottle_per_day: +e.target.value || null })}>
+                  {[0, 1, 2, 3, 4, 6, 8, 12].map((n) => (
+                    <option key={n} value={n}>{n === 0 ? "Not yet" : n}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <p className="muted" style={{ marginTop: 6 }}>
+              First feed + how often = her feed times for the day; the Cares tab uses them for the Fed tick and reminders. Bottle target is SALT&apos;s — the rest of each feed goes down the NG.
+            </p>
 
             <h3>Your pumping</h3>
             <div className="row rowwrap">

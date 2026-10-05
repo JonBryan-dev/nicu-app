@@ -1547,3 +1547,297 @@ select {
     transition: none !important;
   }
 }
+
+/* cares — the 4-hourly round, built for one hand at the cotside */
+.caredue {
+  text-align: center;
+  margin: 6px 0 14px;
+}
+.caredue .big {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 2.8rem;
+  font-weight: 700;
+  line-height: 1.05;
+}
+.caredue .big.due,
+.caredue .big.late { color: var(--rose-deep); }
+.caredue .big.soon { color: var(--sky); }
+.carestep {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--mist);
+}
+.carestep:last-of-type { border-bottom: none; }
+.carecheck {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  border: 2px solid var(--mist);
+  background: none;
+  color: var(--on-accent, #fff);
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 1px;
+}
+.carecheck:disabled { cursor: default; }
+.carestep.done .carecheck {
+  background: var(--sage);
+  border-color: var(--sage);
+}
+.carebody { flex: 1; min-width: 0; }
+.caretitle { font-weight: 700; }
+.carestep.done .caretitle { color: var(--ink-soft); }
+.carehow {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.careopts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+.careopt {
+  border: 1px solid var(--mist);
+  background: none;
+  border-radius: 999px;
+  padding: 7px 13px;
+  font: 600 0.82rem var(--font-nunito), sans-serif;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.careopt.hint { border-color: var(--sky); color: var(--sky); }
+.careopt.on {
+  background: var(--sage);
+  border-color: var(--sage);
+  color: var(--on-accent, #fff);
+}
+.tempflag { font-size: 0.85rem; font-weight: 700; }
+.tempflag.low, .tempflag.high { color: var(--rose-deep); }
+.tempflag.ok { color: var(--sage); }
+.careround {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-bottom: 1px dotted var(--mist);
+  font-size: 0.92rem;
+}
+.careround:last-child { border-bottom: none; }
+.careround .t {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  min-width: 50px;
+  font-weight: 700;
+}
+.carethumbs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  flex-basis: 100%;
+}
+.carethumbs img {
+  width: 58px;
+  height: 58px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+}
+/* today's dots — one per feed slot / care round */
+.dots {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: 6px 0 2px;
+}
+.dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--mist);
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.dot.done { background: var(--sage); border-color: var(--sage); }
+.dot.late { background: var(--sky); border-color: var(--sky); }
+.dot.missed { border-color: var(--rose); background: color-mix(in srgb, var(--rose) 22%, transparent); }
+.dot.now { border-color: var(--rose-deep); box-shadow: 0 0 0 3px color-mix(in srgb, var(--rose-deep) 25%, transparent); }
+.dot:disabled { cursor: default; }
+.dotlabel {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  margin-top: 8px;
+}
+.dotlabel b { color: var(--ink); }
+.streak {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-top: 10px;
+}
+/* cares — scoring, levels, badges, the week */
+.toast {
+  background: color-mix(in srgb, var(--sage) 18%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--sage) 50%, transparent);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-weight: 700;
+  margin: 6px 0 10px;
+  text-align: center;
+}
+.scoreline { margin: 2px 0 6px; }
+.score {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.streaks { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.streaks .streak { font-size: 1.02rem; margin-top: 0; }
+.tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: baseline;
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+.tally-who b { color: var(--rose-deep); }
+.levelbar { margin: 8px 0 8px; }
+.levelbar i { background: var(--rose-deep); }
+.badges {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+.badge-chip {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: center;
+  border: 1px solid var(--mist);
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+.badge-chip.earned {
+  background: color-mix(in srgb, var(--sage) 14%, var(--card));
+  border-color: color-mix(in srgb, var(--sage) 45%, transparent);
+}
+.badge-chip.locked { opacity: 0.55; }
+.badge-chip.locked .badge-emoji { filter: grayscale(1); }
+.badge-emoji { grid-row: 1 / span 2; font-size: 1.4rem; text-align: center; }
+.badge-name { font-weight: 700; font-size: 0.88rem; }
+.badge-how { font-size: 0.74rem; color: var(--ink-soft); }
+.week { display: flex; flex-direction: column; }
+.weekrow {
+  display: grid;
+  grid-template-columns: 52px 1fr 48px 40px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dotted var(--mist);
+  font-size: 0.85rem;
+}
+.weekrow:last-child { border-bottom: none; }
+.weekrow.today .weekday { color: var(--rose-deep); font-weight: 700; }
+.weekday { color: var(--ink-soft); }
+.weekdots { display: flex; flex-wrap: wrap; gap: 4px; }
+.dot.mini { width: 11px; height: 11px; border-width: 1.5px; cursor: default; }
+.weeknum { text-align: right; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.weeknum.pts { font-weight: 700; color: var(--ink); }
+/* nurses' time — outside a parent shift, never held against you */
+.dot.nurses {
+  border-style: dashed;
+  border-color: var(--ink-soft);
+  opacity: 0.55;
+}
+.shifthours {
+  display: grid;
+  grid-template-columns: 44px 1fr 1fr;
+  gap: 6px 10px;
+  align-items: center;
+  margin-top: 8px;
+}
+.shifthours label { margin: 0; }
+.shift th small {
+  display: block;
+  font-weight: 400;
+  font-size: 0.68rem;
+  color: var(--ink-soft);
+}
+/* notes for the team */
+.notecomposer label { margin-top: 8px; }
+.notes { display: flex; flex-direction: column; }
+.note {
+  display: grid;
+  grid-template-columns: 50px 1fr auto;
+  gap: 4px 10px;
+  padding: 9px 0;
+  border-bottom: 1px dotted var(--mist);
+  font-size: 0.92rem;
+  align-items: start;
+}
+.note:last-child { border-bottom: none; }
+.note .t { font-variant-numeric: tabular-nums; color: var(--ink-soft); font-weight: 700; }
+.note .who { color: var(--ink-soft); font-size: 0.8rem; }
+.note .gist { font-weight: 600; }
+.note .body { white-space: pre-wrap; word-break: break-word; }
+.note.flagged {
+  background: color-mix(in srgb, var(--rose) 12%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--rose) 45%, transparent);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.note.flagged .t::before { content: "⚑ "; color: var(--rose-deep); }
+.noteday {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-weight: 700;
+  color: var(--rose-deep);
+  margin: 12px 0 2px;
+  font-size: 0.95rem;
+}
+.flagtoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.flagtoggle input { width: 20px; height: 20px; accent-color: var(--rose-deep); }
+/* feeds by mouth */
+.dot.oral { box-shadow: 0 0 0 2px var(--sky); }
+.weanstage {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px dotted var(--mist);
+  font-size: 0.88rem;
+  align-items: baseline;
+}
+.weanstage:last-child { border-bottom: none; }
+.weanstage.now { font-weight: 700; color: var(--rose-deep); }
+.weanstage.past { opacity: 0.55; }
+.weanstage .n { font-family: var(--font-fraunces), Georgia, serif; font-size: 1.05rem; }
+.bars { display: flex; align-items: flex-end; gap: 5px; height: 56px; margin: 8px 0 2px; }
+.bar { flex: 1; background: var(--sky); border-radius: 4px 4px 0 0; min-height: 2px; opacity: 0.85; }
+.bar.today { background: var(--rose-deep); opacity: 1; }
+.barlabels { display: flex; gap: 5px; font-size: 0.68rem; color: var(--ink-soft); }
+.barlabels span { flex: 1; text-align: center; }

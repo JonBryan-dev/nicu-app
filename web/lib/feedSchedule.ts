@@ -16,6 +16,14 @@ export interface FeedSettingsRow {
   baby_first_feed?: string | null; // 'HH:MM'
   baby_interval_min?: number | null;
   baby_ml?: number | null;
+  // weaning off the pump (migration 040) — the planner follows today's count
+  weaning?: boolean;
+  wean_target?: string | null; // 'YYYY-MM-DD'
+  wean_started?: string | null;
+  wean_start_count?: number | null;
+  // SALT's bottle target alongside the NG plan
+  bottle_ml?: number | null;
+  bottle_per_day?: number | null;
 }
 export interface SleepWindowRow {
   id?: string;

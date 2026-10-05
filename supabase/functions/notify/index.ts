@@ -24,7 +24,7 @@ webpush.setVapidDetails(
 type NotificationRow = {
   id: string;
   family_id: string;
-  recipient_role: "parent" | "family" | "all";
+  recipient_role: "parent" | "family" | "all" | "one"; // "one" = recipient_id only, never a role
   recipient_id?: string | null; // set = this one person, not the whole role
   actor_id: string | null;
   title: string;
@@ -42,8 +42,8 @@ Deno.serve(async (req) => {
     // request, say), otherwise everyone in the family with a matching role.
     // Either way the actor never gets pushed their own action.
     let recipientIds: string[];
-    if (row.recipient_id) {
-      recipientIds = row.recipient_id === row.actor_id ? [] : [row.recipient_id];
+    if (row.recipient_id || row.recipient_role === "one") {
+      recipientIds = row.recipient_id && row.recipient_id !== row.actor_id ? [row.recipient_id] : [];
     } else {
       let q = supabase
         .from("profiles")
