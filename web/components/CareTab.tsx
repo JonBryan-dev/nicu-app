@@ -1210,7 +1210,7 @@ export default function CareTab() {
           <>
             <div className="noteday">To tell the team</div>
             {openFlags.map((n) => (
-              <div key={n.id} className="note flagged">
+              <div key={n.id} className="carenote flagged">
                 <span className="t">{fmtHM(new Date(n.at))}</span>
                 <span>
                   {noteGist(n) && <div className="gist">{noteGist(n)}</div>}
@@ -1235,7 +1235,7 @@ export default function CareTab() {
               <div className="noteday">{noteDayLabel(k)}</div>
               <div className="notes">
                 {list.map((n) => (
-                  <div key={n.id} className="note">
+                  <div key={n.id} className="carenote">
                     <span className="t">{fmtHM(new Date(n.at))}</span>
                     <span>
                       {noteGist(n) && <div className="gist">{noteGist(n)}</div>}
