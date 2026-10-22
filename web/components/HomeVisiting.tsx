@@ -43,7 +43,7 @@ export default function HomeVisiting({ onRequest }: { onRequest?: () => void }) 
       <div className="card">
         <h2>Visiting {first}, {who} at home</h2>
         <p className="note">
-          {first} was born very early. For her first winter at home her lungs and immune system are still catching up, so the neonatal team ask visitors to follow a few rules. None of them are about you — all of them are about keeping her out of hospital.
+          {first} was born very early, and her first winter at home is the one to be a bit careful in. She&apos;s had her RSV jab, which takes the edge off the biggest worry — so this isn&apos;t a fortress, just a few sensible asks from the neonatal team. None of them are about you; all of them are about her.
         </p>
         {!isParent && onRequest && (
           <button className="primary" onClick={onRequest} style={{ marginTop: 4 }}>
@@ -54,11 +54,11 @@ export default function HomeVisiting({ onRequest }: { onRequest?: () => void }) 
 
       <div className="card">
         <h2>Before you come</h2>
-        <Rule icon="🤧" title="Any sign of illness — please don't come">
-          A cold, cough, sore throat, temperature, sickness or diarrhoea, or a cold sore — even mild, even &ldquo;just a sniffle&rdquo;. Wait until you&apos;ve been completely well for <b>48 hours</b>. Cold sores matter especially: the virus can be dangerous to a newborn.
+        <Rule icon="🤧" title="Under the weather? Give it a miss this time">
+          A cold, cough, sore throat, temperature, sickness or diarrhoea — her RSV jab doesn&apos;t cover any of those, and they land harder on her than on you. Come once you&apos;ve been well for <b>48 hours</b>. An active cold sore is the one hard no: that virus is genuinely dangerous to a baby.
         </Rule>
         <Rule icon="🏠" title="Someone unwell at yours?">
-          If anyone in your household is poorly, check with {who} before you set off. A video call is always a good visit.
+          Worth a quick message to {who} before you set off. A video call is always a good visit.
         </Rule>
         <Rule icon="💉" title="Jabs">
           Flu and COVID vaccines are recommended for people who&apos;ll be around a premature baby over winter. If you&apos;ll be a regular, ask your GP or pharmacist about the whooping cough vaccine too.
@@ -76,8 +76,8 @@ export default function HomeVisiting({ onRequest }: { onRequest?: () => void }) 
         <Rule icon="🚭" title="No smoke, no vape">
           Smoke on clothes and breath is a real risk to premature lungs. Please don&apos;t smoke or vape before you visit, and come in clean clothes if you&apos;ve been around smoke.
         </Rule>
-        <Rule icon="💋" title="No kissing">
-          Not her face, not her hands — however much you want to. Germs that are nothing to you can be a hospital stay for her.
+        <Rule icon="💋" title="Kisses on hold for now">
+          Not her face or hands, however tempting — this one&apos;s about cold-sore and tummy-bug germs, which the jab does nothing for. Cuddles are the thing.
         </Rule>
         <Rule icon="🧥" title="Coats off, phones away, perfume skipped">
           Outdoor layers off at the door. Phones carry a lot — wipe it or leave it in your pocket. Strong scents can bother her breathing.
@@ -89,8 +89,8 @@ export default function HomeVisiting({ onRequest }: { onRequest?: () => void }) 
 
       <div className="card">
         <h2>While you&apos;re here</h2>
-        <Rule icon="⏱" title="Keep it short">
-          An hour is plenty. A tired premature baby doesn&apos;t show it in the moment — it shows up as a rough night afterwards.
+        <Rule icon="⏱" title="An hour is a good visit">
+          A tired premature baby doesn&apos;t show it in the moment — it shows up as a rough night afterwards. Short and sweet, and come again soon.
         </Rule>
         <Rule icon="🤫" title="One voice, low light, no passing round">
           She copes best with calm. Watch for her saying &ldquo;enough&rdquo;: splayed fingers, looking away, yawning, hiccups, going floppy or stiff. When you see those, she&apos;s done.
@@ -99,7 +99,7 @@ export default function HomeVisiting({ onRequest }: { onRequest?: () => void }) 
           Feeds and sleeps come first. If {who} say it&apos;s time, it&apos;s time — they won&apos;t mind you leaving, and they&apos;ll mind if you stay.
         </Rule>
         <Rule icon="🧒" title="Children">
-          Only if they&apos;re completely well, and with an adult the whole time. Nursery and school bugs are the main way winter viruses reach babies.
+          Very welcome when they&apos;re well, with an adult alongside. Nursery and school are where the winter bugs come from, so a snotty week is a week to wait.
         </Rule>
         <Rule icon="🐾" title="Pets">
           Not in the same room as her.
@@ -107,12 +107,12 @@ export default function HomeVisiting({ onRequest }: { onRequest?: () => void }) 
       </div>
 
       <div className="card">
-        <h2>Winter and RSV</h2>
+        <h2>Winter</h2>
         <p className="note">
-          October to March is RSV season. For most people it&apos;s a cold; for a premature baby it can be bronchiolitis and a return to hospital. It is the single reason these rules are strict — and why <b>if you&apos;re not sure, stay away and wave on a video call</b>. That&apos;s the kindest visit there is.
+          {first} has had her RSV jab, so the virus that puts most premature babies back in hospital over winter is largely covered. What it doesn&apos;t cover is everything else going round — colds, flu, COVID, tummy bugs — which is why the asks above are still worth keeping to. The simple test: <b>if you&apos;re not sure you&apos;re well, make it a video call this time</b>.
         </p>
-        <Rule icon="🚨" title="If you ever notice these, tell them straight away">
-          Breathing fast or working hard (pulling in under the ribs or at the neck), going off feeds, unusually sleepy or floppy, a high temperature. Blue or grey lips or face is <b>999</b>.
+        <Rule icon="👀" title="Worth telling them if you ever notice">
+          Breathing fast or working hard (pulling in under the ribs or at the neck), going off her feeds, unusually sleepy or floppy, a high temperature. Blue or grey lips or face is <b>999</b> — but that&apos;s a just-so-you-know, not something to expect.
         </Rule>
       </div>
 
