@@ -1841,3 +1841,16 @@ select {
 .bar.today { background: var(--rose-deep); opacity: 1; }
 .barlabels { display: flex; gap: 5px; font-size: 0.68rem; color: var(--ink-soft); }
 .barlabels span { flex: 1; text-align: center; }
+/* visiting at home — the rules, one at a time */
+.homerule {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--mist);
+  align-items: start;
+}
+.homerule:last-child { border-bottom: none; }
+.homerule-icon { font-size: 1.3rem; line-height: 1.3; text-align: center; }
+.homerule-title { font-weight: 700; }
+.homerule-body { font-size: 0.92rem; color: var(--ink); margin-top: 2px; line-height: 1.5; }

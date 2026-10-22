@@ -3,6 +3,7 @@
 // their own. Grouped by date, upcoming only.
 import { useCallback, useEffect, useState } from "react";
 import { useFamily } from "@/components/FamilyProvider";
+import HomeVisiting from "@/components/HomeVisiting";
 import { useRealtime } from "@/lib/useRealtime";
 import { todayKey, fmtDate, fmtTime, isoWeekKey, dayName } from "@/lib/dates";
 import { presenceFor } from "@/lib/presence";
@@ -42,6 +43,7 @@ export default function VisitsTab() {
   const [reqNote, setReqNote] = useState("");
   const [reqMsg, setReqMsg] = useState("");
   const [showReq, setShowReq] = useState(false);
+  const [view, setView] = useState<"slots" | "home">("slots");
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -353,9 +355,29 @@ export default function VisitsTab() {
     else day.groups.push({ key, slots: [s] });
   }
 
+  const first = family.baby_name.split(" ")[0];
+
   return (
     <section>
-      {isParent && (
+      <div className="viewtabs" role="tablist" aria-label="Visits">
+        <button type="button" role="tab" aria-selected={view === "slots"} className={view === "slots" ? "on" : ""} onClick={() => setView("slots")}>
+          Visiting slots
+        </button>
+        <button type="button" role="tab" aria-selected={view === "home"} className={view === "home" ? "on" : ""} onClick={() => setView("home")}>
+          {first} at home
+        </button>
+      </div>
+
+      {view === "home" && (
+        <HomeVisiting
+          onRequest={() => {
+            setView("slots");
+            setShowReq(true);
+          }}
+        />
+      )}
+
+      {view === "slots" && isParent && (
         <form className="card" onSubmit={addSlot}>
           <h2>Open a visiting slot</h2>
           <p className="note">
@@ -444,7 +466,7 @@ export default function VisitsTab() {
         </form>
       )}
 
-      {isParent && requests.some((r) => r.status === "pending") && (
+      {view === "slots" && isParent && requests.some((r) => r.status === "pending") && (
         <div className="card">
           <h2>Visit requests</h2>
           <p className="note">Approving opens a slot at that time and books them straight in.</p>
@@ -470,7 +492,7 @@ export default function VisitsTab() {
         </div>
       )}
 
-      {!isParent && profile.role === "family" && (
+      {view === "slots" && !isParent && profile.role === "family" && (
         <div className="card">
           <h2>Book a visit</h2>
           {!showReq ? (
@@ -539,6 +561,7 @@ export default function VisitsTab() {
         </div>
       )}
 
+      {view === "slots" && (
       <div className="card">
         <h2>Visiting slots</h2>
         {!isParent && (
@@ -681,7 +704,7 @@ export default function VisitsTab() {
           ))
         )}
       </div>
-
+      )}
     </section>
   );
 }
